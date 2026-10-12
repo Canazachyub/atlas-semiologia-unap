@@ -1,0 +1,545 @@
+/* Atlas del banco · Semiología — lógica de la app (sin dependencias). Datos: window.ATLAS (datos.js). */
+(function () {
+  "use strict";
+  const A = window.ATLAS, $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const vista = $("#vista");
+  document.title = A.titulo; { const m = $(".marca span"); if (m) m.textContent = A.marca; }
+  const CIRC = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚㉛㉜㉝㉞㉟";
+  const numCirc = ch => CIRC.indexOf(ch) + 1;
+  const porN = Object.fromEntries(A.laminas.map(l => [l.n, l]));
+
+  /* ---------- progreso (localStorage, con respaldo en memoria) ---------- */
+  const CLAVE = "atlas-semio-v1"; let mem = {};
+  function leer() { try { return JSON.parse(localStorage.getItem(CLAVE)) || {}; } catch (e) { return mem; } }
+  function guardar(o) { mem = o; try { localStorage.setItem(CLAVE, JSON.stringify(o)); } catch (e) {} }
+  let P = leer();
+  const marca = id => (P.q || {})[id];
+  function marcar(id, v) { P.q = P.q || {}; if (P.q[id] === v) delete P.q[id]; else P.q[id] = v; guardar(P); }
+
+  /* ---------- tema ---------- */
+  function aplicaTema() { if (P.tema) document.documentElement.dataset.theme = P.tema; }
+  aplicaTema();
+  { const nav = $(".barra nav"), b = document.createElement("button"); b.id = "son-btn";
+    const pinta = () => { b.textContent = P.sonido === false ? "🔇" : "🔊"; b.title = P.sonido === false ? "Activar sonidos" : "Silenciar sonidos"; };
+    b.onclick = () => { P.sonido = P.sonido === false; guardar(P); pinta(); if (SON.activo()) { SON.despertar(); SON.bien(); } };
+    pinta(); nav.insertBefore(b, $("#tema-btn")); }
+  document.addEventListener("pointerdown", () => SON.despertar(), { once: true });
+  $("#tema-btn").onclick = () => { SON.click();
+    const osc = matchMedia("(prefers-color-scheme: dark)").matches;
+    const actual = P.tema || (osc ? "dark" : "light");
+    P.tema = actual === "dark" ? "light" : "dark"; guardar(P); aplicaTema();
+  };
+
+  /* ---------- sonidos (Web Audio, sintetizados; sin archivos) ---------- */
+  const SON = (() => {
+    let ctx = null, ultimo = 0;
+    const activo = () => P.sonido !== false;
+    function c() { if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } } if (ctx.state === "suspended") ctx.resume(); return ctx; }
+    // nota: frecuencia, inicio (s), duración, tipo de onda, volumen, deslizamiento final
+    function nota(f, t0 = 0, dur = .12, tipo = "sine", vol = .12, fFin = null) {
+      if (!activo()) return; const ac = c(); if (!ac) return;
+      const t = ac.currentTime + t0, o = ac.createOscillator(), g = ac.createGain();
+      o.type = tipo; o.frequency.setValueAtTime(f, t); if (fFin) o.frequency.exponentialRampToValueAtTime(fFin, t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + .03);
+    }
+    function ruido(t0 = 0, dur = .18, vol = .06, desde = 1800, hasta = 600) {
+      if (!activo()) return; const ac = c(); if (!ac) return;
+      const n = Math.floor(ac.sampleRate * dur), b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain(), t = ac.currentTime + t0;
+      fl.type = "bandpass"; fl.frequency.setValueAtTime(desde, t); fl.frequency.exponentialRampToValueAtTime(hasta, t + dur); fl.Q.value = 1.2;
+      g.gain.value = vol; s.buffer = b; s.connect(fl).connect(g).connect(ac.destination); s.start(t);
+    }
+    const limitar = (ms, f) => (...x) => { const ahora = performance.now(); if (ahora - ultimo < ms) return; ultimo = ahora; f(...x); };
+    return {
+      activo,
+      pop: () => { nota(660, 0, .07, "triangle", .14, 990); },                       // tocar etiqueta / letra
+      tick: limitar(40, () => nota(1500, 0, .035, "square", .035)),                  // mover carrusel, pasos
+      giro: () => { ruido(0, .2, .07, 900, 2600); nota(520, .04, .08, "sine", .05, 780); }, // voltear ficha
+      bien: () => { nota(784, 0, .1, "triangle", .13); nota(1175, .09, .18, "triangle", .13); },      // acierto / la sé
+      mal: () => { nota(220, 0, .16, "sawtooth", .07, 160); nota(196, .1, .2, "sawtooth", .06, 140); }, // error
+      repasar: () => { nota(440, 0, .1, "sine", .1); nota(392, .1, .16, "sine", .09); },              // marcar para repasar
+      swish: () => ruido(0, .25, .06, 600, 3000),                                     // cambiar de imagen
+      blip: i => nota(392 * Math.pow(2, (i % 8) / 7), 0, .11, "triangle", .1),        // paso a paso (sube)
+      fanfarria: () => [523, 659, 784, 1047].forEach((f, i) => nota(f, i * .11, i === 3 ? .45 : .14, "triangle", .13)),
+      click: () => nota(880, 0, .04, "square", .04),
+      despertar: () => c(),
+    };
+  })();
+  function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("ver"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("ver"), 1800); }
+
+  /* ---------- utilidades ---------- */
+  const norm = s => (s || "").replace(/<[^>]+>/g, " ").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const badge = v => v >= 3 ? '<span class="badge b3">🔥 3 veces</span>' : v === 2 ? '<span class="badge b2">🔁 2 veces</span>' : "";
+  function grupoDe(l) { return A.grupos.find(g => g.id === l.grupo) || A.grupos[0]; }
+  function progresoLamina(l) { const ok = l.preguntas.filter(q => marca(q.id) === "ok").length; return [ok, l.preguntas.length]; }
+  // convierte ① en enlaces a preguntas y prepara las letras amarillas
+  function enlazar(root, l) {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodos = []; while (w.nextNode()) if (/[①-⑳㉑-㉟]/.test(w.currentNode.nodeValue) && !w.currentNode.parentElement.closest(".et")) nodos.push(w.currentNode);
+    for (const t of nodos) {
+      const frag = document.createDocumentFragment();
+      for (const ch of t.nodeValue) {
+        const n = numCirc(ch);
+        if (n > 0) { const a = document.createElement("a"); a.className = "ref"; a.textContent = n; a.dataset.n = n; a.title = "Ver la pregunta " + n; frag.appendChild(a); }
+        else frag.appendChild(document.createTextNode(ch));
+      }
+      t.parentNode.replaceChild(frag, t);
+    }
+    $$(".ref", root).forEach(a => a.onclick = ev => { ev.preventDefault(); irPregunta(l, +a.dataset.n); });
+    $$(".lt2,.lt", root).forEach(s => { s.dataset.l = s.textContent.trim(); s.onclick = () => { SON.pop(); brillaLetra(s.dataset.l); }; });
+  }
+  function irPregunta(l, n) {
+    const f = $(`.ficha[data-n="${n}"]`);
+    if (!f) return;
+    if (f.style.display === "none") { const b0 = $("#filtros button"); if (b0) b0.click(); }
+    f.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    f.classList.add("resalta", "vuelta"); setTimeout(() => f.classList.remove("resalta"), 2200);
+  }
+  function brillaLetra(L) {
+    const m = $(`.mk[data-l="${L}"]`); if (!m) return;
+    $("#lienzo").scrollIntoView({ behavior: "smooth", block: "center" });
+    m.classList.remove("brilla"); void m.offsetWidth; m.classList.add("brilla");
+    const li = $(`.ncard[data-l="${L}"]`); if (li) { li.classList.add("brilla"); setTimeout(() => li.classList.remove("brilla"), 2000); }
+  }
+
+
+  /* ---------- regla de un rango numérico: barra con zonas rotuladas + tablita ---------- */
+  function regla(r) {
+    const W = 400, X0 = 12, X1 = W - 12, x = v => X0 + (v - r.min) / (r.max - r.min) * (X1 - X0);
+    const col = { n: "#2e7d32", b: "#1565c0", a: "#c62828", m: "#d08a00" }, nom = { n: "Normal", b: "Bajo", a: "Alto", m: "Intermedio" };
+    const fmt = v => String(v).replace(".", ",");
+    const zonas = r.zonas || [];
+    // barra
+    let svg = `<rect x="${X0}" y="22" width="${X1 - X0}" height="20" rx="10" fill="#9aa" opacity=".25"/>`;
+    zonas.forEach(([a0, b0, c, et], k) => {
+      const xa = x(a0), xb = x(b0), w = Math.max(1, xb - xa), r0 = k === 0 ? 10 : 0, r1 = k === zonas.length - 1 ? 10 : 0;
+      svg += `<path d="M${xa + r0} 22 H${xb - r1} ${r1 ? `A10 10 0 0 1 ${xb} 32 A10 10 0 0 1 ${xb - r1} 42` : `V42`} H${xa + r0} ${r0 ? `A10 10 0 0 1 ${xa} 32 A10 10 0 0 1 ${xa + r0} 22` : `V22`} Z" fill="${col[c] || "#888"}"/>`;
+      const txt = et || nom[c] || "";
+      if (w > txt.length * 7.4 + 8) svg += `<text x="${(xa + xb) / 2}" y="36" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">${txt}</text>`;
+    });
+    // marcas: debajo, alternando altura si están muy juntas
+    const ms = (r.marcas || []).slice().sort((p, q) => p - q);
+    let ult = -99, nivel = 0, hmax = 58;
+    ms.forEach(v => {
+      const xv = x(v); nivel = xv - ult < 30 ? (nivel ? 0 : 1) : 0; ult = xv;
+      const y = 58 + nivel * 13; hmax = Math.max(hmax, y);
+      svg += `<line x1="${xv}" y1="20" x2="${xv}" y2="${y - 10}" stroke="currentColor" stroke-width="1.3" opacity=".75"/>
+        <text x="${xv}" y="${y}" font-size="14" font-weight="700" text-anchor="middle" fill="currentColor">${fmt(v)}</text>`;
+    });
+    // valor señalado arriba
+    if (r.valor !== undefined) {
+      const xv = x(r.valor);
+      svg += `<path d="M${xv - 7} 6 L${xv + 7} 6 L${xv} 18 Z" fill="#f2b705" stroke="#1b1b1b" stroke-width="1"/>
+        <text x="${Math.min(X1 - 30, Math.max(X0 + 30, xv))}" y="5" font-size="10.5" font-weight="700" text-anchor="middle" fill="currentColor" dy="-1"></text>`;
+    }
+    const alto = hmax + 6;
+    // tablita
+    const rango = (a0, b0, k) => k === 0 && a0 === r.min && zonas.length > 1 ? `&lt; ${fmt(b0)}` : k === zonas.length - 1 && b0 === r.max && zonas.length > 1 ? `&gt; ${fmt(a0)}` : `${fmt(a0)}–${fmt(b0)}`;
+    const filas = zonas.map(([a0, b0, c, et], k) => `<tr><td><i style="background:${col[c] || "#888"}"></i></td><td><b>${rango(a0, b0, k)}</b> ${r.unidad || ""}</td><td>${et || nom[c] || ""}</td></tr>`).join("");
+    return `<div class="regla-box"><svg class="regla" viewBox="0 0 ${W} ${alto}" role="img" aria-label="rango ${r.min} a ${r.max} ${r.unidad || ""}">${svg}</svg>
+      ${r.valor !== undefined ? `<div class="rvalor">▼ marcado: <b>${fmt(r.valor)} ${r.unidad || ""}</b></div>` : ""}
+      ${filas ? `<table class="rtabla">${filas}</table>` : ""}</div>`;
+  }
+  /* ---------- tarjeta de escala clínica: tabla de ítems y tabla de interpretación ---------- */
+  function escalaHTML(s) {
+    const sem = { N: ["sn", "🟢"], L: ["sl", "🟡"], M: ["sm", "🟠"], G: ["sg", "🔴"] };
+    // «4 espontánea · 3 al sonido» → filas puntaje | respuesta; si no empieza con puntaje, va como texto
+    const filasItem = txt => {
+      const partes = txt.split(" · ");
+      const conPunt = partes.every(p => /^([0-9]+|[IVX]+|[+]+|[0-9]+[+])\s/.test(p));
+      if (!conPunt) return `<tr><td colspan="2" class="libre">${partes.join(" · ")}</td></tr>`;
+      return partes.map(p => { const m = p.match(/^(\S+)\s+(.*)$/); return `<tr><td class="pz">${m[1]}</td><td>${m[2]}</td></tr>`; }).join("");
+    };
+    const items = s.items.map(([a, b]) => `<tbody><tr class="sub"><th colspan="2">${a}</th></tr>${filasItem(b)}</tbody>`).join("");
+    const interp = s.interp.map(([v, t, c]) => `<tr class="${(sem[c] || sem.N)[0]}"><td class="pz">${v}</td><td>${(sem[c] || sem.N)[1]} ${t}</td></tr>`).join("");
+    return `<div class="escala"><div class="eh"><span class="ei">${s.icono}</span><div><b>${s.nombre}</b><small>${s.mide}</small></div></div>
+      ${items ? `<table class="etab"><colgroup><col style="width:78px"><col></colgroup><thead><tr>${/class="pz"/.test(items) ? `<th class="pz">Puntaje</th><th>Respuesta / hallazgo</th>` : `<th colspan="2">Hallazgos por grado</th>`}</tr></thead>${items}</table>` : ""}
+      ${interp ? `<div class="etit">Interpretación</div><table class="etab itp"><colgroup><col style="width:78px"><col></colgroup>${interp}</table>` : ""}
+      ${s.perla ? `<p class="perla">💡 ${s.perla}</p>` : ""}${s.lit ? `<p class="litn">📚 ${s.lit}</p>` : ""}</div>`;
+  }
+
+  /* ---------- router ---------- */
+  function ruta() {
+    const h = location.hash.replace(/^#\/?/, "").split("/");
+    $$(".barra nav a").forEach(a => a.classList.toggle("act", (h[0] || "inicio") === a.dataset.nav || (h[0] === "" && a.dataset.nav === "inicio")));
+    detenerTodo();
+    if (h[0] === "l" && porN[+h[1]]) vistaLamina(porN[+h[1]], h[2]);
+    else if (h[0] === "repaso") vistaRepaso(h[1]);
+    else vistaInicio();
+    if (h[0] !== "l" || !h[2]) window.scrollTo(0, 0);
+  }
+  addEventListener("hashchange", ruta);
+  let timers = [];
+  let teclas = [];
+  function detenerTodo() { timers.forEach(clearTimeout); timers = []; teclas = []; document.onkeydown = null; }
+  const luego = (f, ms) => timers.push(setTimeout(f, ms));
+
+  /* ---------- inicio ---------- */
+  const unicas = () => { const vistos = new Set(); return A.laminas.flatMap(l => l.preguntas.map(q => ({ q, l }))).filter(x => !vistos.has(x.q.id) && vistos.add(x.q.id)); };
+  function vistaInicio() {
+    const todas = unicas();
+    const ok = todas.filter(x => marca(x.q.id) === "ok").length, fuego = todas.filter(x => x.q.veces >= 3).length, hayRep = todas.some(x => x.q.veces >= 2);
+    let h = `<section class="portada"><div class="hola"><h1>${A.titulo}</h1>
+      <p>${A.laminas.length} láminas ilustradas que explican ${A.descripcion} (<b>${todas.length} preguntas</b>).
+      Toca las etiquetas, reproduce la fisiopatología y voltea las preguntas.</p>
+      <a class="btn" href="#/repaso">${hayRep ? "🔥 Repaso: primero las que más salen" : "🔀 Repaso de todas las preguntas"}</a></div>
+      <div class="stats"><div class="stat"><b>${todas.length}</b><span>preguntas</span></div>
+      ${hayRep ? `<div class="stat"><b>${fuego}</b><span>🔥 salieron 3 veces</span></div>` : `<div class="stat"><b>${A.laminas.reduce((s, l) => s + l.diapos.length, 0)}</b><span>🖼️ imágenes anotadas</span></div>`}
+      <div class="stat"><b>${ok}</b><span>ya dominas</span><div class="barra-prog"><i style="width:${(ok / todas.length * 100).toFixed(1)}%"></i></div></div></div></section>
+      <input class="buscar" id="buscar" placeholder="🔎 Busca en las ${todas.length} preguntas (p. ej. ${A.ejemplos || "«Damoiseau», «galope», «facies»"})…" autocomplete="off">
+      <div class="resultados" id="resultados"></div>`;
+    for (const g of A.grupos) {
+      const ls = A.laminas.filter(l => l.grupo === g.id); if (!ls.length) continue;
+      h += `<h2>${g.icono} ${g.nombre}</h2><div class="grid-lam">`;
+      for (const l of ls) {
+        const [o, t] = progresoLamina(l), f3 = l.preguntas.filter(q => q.veces >= 3).length;
+        h += `<a class="tarj" href="#/l/${l.n}"><div class="mini" style="background-image:url('${l.img}')"><span>Lámina ${l.n}</span></div>
+          <div class="cuerpo"><b>${l.titulo}</b><div class="meta"><span>❓ ${t} preguntas</span>${f3 ? `<span>🔥 ${f3}</span>` : ""}<span>✓ ${o}</span></div>
+          <div class="barra-prog"><i style="width:${(o / t * 100).toFixed(0)}%"></i></div></div></a>`;
+      }
+      h += "</div>";
+    }
+    vista.innerHTML = h;
+    const inp = $("#buscar"), res = $("#resultados");
+    inp.oninput = () => {
+      const t = norm(inp.value.trim()); if (t.length < 3) { res.innerHTML = ""; return; }
+      const hs = todas.filter(x => norm(x.q.pregunta + " " + x.q.r + " " + x.q.x).includes(t)).slice(0, 30);
+      res.innerHTML = hs.map(x => `<a href="#/l/${x.l.n}/q${x.q.n}"><b>${x.q.pregunta}</b><br><small>Lámina ${x.l.n} · ${x.l.titulo} ${x.q.veces >= 3 ? "· 🔥" : x.q.veces === 2 ? "· 🔁" : ""}</small></a>`).join("")
+        || "<small>Sin resultados.</small>";
+    };
+  }
+
+  /* ---------- lámina ---------- */
+  function vistaLamina(l, sub) {
+    const g = grupoDe(l);
+    let h = `<style>${l.css || ""}</style><div class="migas"><a href="#/">← Láminas</a> · ${g.icono} ${g.nombre}</div>
+      <h1>Lámina ${l.n} · ${l.titulo} <small>${l.subtitulo}</small></h1><div class="lema">${l.lema}</div>
+      <nav class="pestanas"><a href="#/l/${l.n}/imagen">🖼️ Imagen</a>${l.cadena ? `<a href="#/l/${l.n}/cadena">⚙️ ${l.cadena.titulo}</a>` : ""}
+      <a href="#/l/${l.n}/preguntas">❓ Preguntas (${l.preguntas.length})</a>${l.escalas && l.escalas.length ? `<a href="#/l/${l.n}/escalas">📏 Escalas (${l.escalas.length})</a>` : ""}${l.tabla ? `<a href="#/l/${l.n}/tabla">📋 Tabla</a>` : ""}
+      ${l.n > 1 && porN[l.n - 1] ? `<a href="#/l/${l.n - 1}">← ${l.n - 1}</a>` : ""}${porN[l.n + 1] ? `<a href="#/l/${l.n + 1}">${l.n + 1} →</a>` : ""}</nav>
+      <section id="imagen" class="zona"><div><div class="marco">
+        <div class="controles"><button class="btn chico" id="b-tour">▶ Recorrer</button><button class="btn chico sec" id="b-quiz">🎯 ¿Dónde está?</button>
+        <button class="btn chico sec" id="b-ocultar">👁️ Ocultar etiquetas</button><span class="quiz-msg" id="quiz-msg"></span></div>
+        ${l.diapos.length > 1 ? `<div class="dtabs" id="dtabs">${l.diapos.map((d, k) => `<button data-k="${k}"><b>${k + 1}</b> ${d.titulo || "Imagen " + (k + 1)}</button>`).join("")}</div>` : ""}
+        <div class="lienzo" id="lienzo"><img src="${l.diapos[0].img}" alt="${l.titulo}"><svg id="lineas" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+        ${l.diapos.length > 1 ? `<button class="dflecha prev" id="d-prev" title="Imagen anterior">‹</button><button class="dflecha next" id="d-next" title="Imagen siguiente">›</button><span class="dcont" id="dcont"></span>` : ""}</div>
+        <div class="dcap" id="dcap"></div>
+      </div><div class="fuente">${l.fuente} ${A.credito}</div></div>
+      <aside class="lado"><div id="info"></div><div class="caja"><h3>${l.lado.titulo}</h3>${l.lado.parrafos.map(p => `<p>${p}</p>`).join("")}</div>
+      </aside></section>
+      ${l.lado.recordar || l.numeros.length ? `<section class="claves${l.lado.recordar && l.numeros.length ? "" : " una"}" id="claves">
+        ${l.lado.recordar ? `<div class="recordar"><div class="ic">🧠</div><div><h3>Para recordar</h3><p>${l.lado.recordar}</p></div></div>` : ""}
+        ${l.numeros.length ? `<div class="nums"><h3>🔢 Números clave <small>toca una letra para verla en la imagen</small></h3>
+          <div class="numgrid">${l.numeros.map(x => `<div class="ncard" data-l="${x.l}"><span class="lt grande">${x.l}</span><div class="ntx">${x.html}${x.rango ? regla(x.rango) : ""}</div></div>`).join("")}</div></div>` : ""}
+      </section>` : ""}
+      ${l.escalas && l.escalas.length ? `<h2 id="escalas">📏 Escalas que se aplican</h2><div class="escgrid">${l.escalas.map(escalaHTML).join("")}</div>` : ""}`;
+    if (l.cadena) {
+      const c = l.cadena;
+      h += `<h2 id="cadena">⚙️ ${c.titulo} <small style="font-size:14px;color:var(--tx2);font-weight:500">${c.subtitulo}</small></h2>
+        <div class="lema">${c.lema}</div><div class="cad-ctl"><button class="btn chico" id="b-play">▶ Reproducir paso a paso</button>
+        <button class="btn chico sec" id="b-todo">Ver todo</button></div>
+        <div class="pasos" id="pasos">${c.pasos.map((p, i) => (i ? `<div class="flecha" data-i="${i}">➜</div>` : "") +
+          `<div class="paso ${p.color}" data-i="${i}"><div class="t">${p.t}</div><div class="m">${p.m}</div>
+           <div class="pr"><b>${p.pr_tit}</b> ${p.pr}${p.rf ? `<span class="rf">${p.rf}</span>` : ""}</div></div>`).join("")}</div>
+        ${c.extra.length ? `<div class="extra">${c.extra.map(x => `<div class="${x.k}">${x.html}</div>`).join("")}</div>` : ""}
+        ${c.escaleras.map(s => `<div class="esc ${s.c}"><div class="et2">${s.t}</div><div class="esl">${s.pasos.map((p, j) =>
+          (j ? "<i>›</i>" : "") + `<span class="e${j === s.pasos.length - 1 ? " fin" : ""}">${p}</span>`).join("")}</div></div>`).join("")}
+        ${c.html ? `<div class="libre">${c.html}</div>` : ""}<div class="fuente">${c.fuente}</div>`;
+    }
+    h += `<h2 id="preguntas">❓ Las preguntas del banco que responde</h2>
+      <div class="filtros" id="filtros"><button data-f="todas" class="on">Todas</button><button data-f="fuego">🔥 3 veces</button>
+      <button data-f="rep">🔁 2+ veces</button><button data-f="pend">Pendientes</button><button data-f="mal">✗ Para repasar</button>
+      <button data-f="voltear">↻ Voltear todas</button><span class="cuenta" id="cuenta"></span></div>
+      <div class="carrusel"><button class="cnav prev" id="c-prev" title="Anterior (←)">‹</button>
+      <div class="pista-c" id="fichas">${l.preguntas.map(fichaHTML).join("")}</div>
+      <button class="cnav next" id="c-next" title="Siguiente (→)">›</button></div>
+      <div class="c-pie"><span id="c-pos"></span><div class="puntos" id="puntos"></div><span class="kbd">← → mover · espacio voltear · 1 la sé · 2 repasar</span></div>`;
+    if (l.tabla) h += `<h2 id="tabla">📋 Tabla comparativa</h2><div class="tabla-wrap"><table class="tabla"><tr>${l.tabla.cab.map(x => `<th>${x}</th>`).join("")}</tr>
+      ${l.tabla.filas.map(f => `<tr>${f.map(x => `<td>${x}</td>`).join("")}</tr>`).join("")}</table></div>`;
+    vista.innerHTML = h;
+    montarLienzo(l);
+    if (l.cadena) montarCadena();
+    montarFichas(l);
+    enlazar(vista, l);
+    document.onkeydown = ev => { if (ev.target.tagName === "INPUT") return; for (const h of teclas) if (h(ev)) return; };
+    $$(".pestanas a[href*='/" + l.n + "/']").forEach(a => a.onclick = ev => {
+      const id = a.getAttribute("href").split("/").pop(); const el = document.getElementById(id);
+      if (el) { ev.preventDefault(); el.scrollIntoView({ behavior: "smooth" }); history.replaceState(null, "", a.getAttribute("href")); }
+    });
+    if (sub) setTimeout(() => {
+      if (/^q\d+$/.test(sub)) irPregunta(l, +sub.slice(1));
+      else { const el = document.getElementById(sub); if (el) el.scrollIntoView({ behavior: "smooth" }); }
+    }, 350);
+  }
+
+  function montarLienzo(l) {
+    const lz = $("#lienzo"), svg = $("#lineas"), img = $("img", lz);
+    let k = 0;
+    const trazar = () => {
+      const b = lz.getBoundingClientRect(), W = b.width, H = b.height; if (!W || !H) return;
+      let out = "";
+      $$(".et", lz).forEach(el => {
+        const e = l.etiquetas[+el.dataset.i]; if (!e || e.ax === undefined) return;
+        const r = el.getBoundingClientRect();
+        const x0 = (r.left - b.left) / W * 100, x1 = (r.right - b.left) / W * 100, y0 = (r.top - b.top) / H * 100, y1 = (r.bottom - b.top) / H * 100;
+        const px = Math.min(Math.max(e.ax, x0), x1), py = Math.min(Math.max(e.ay, y0), y1), dl = (0.15 + (+el.dataset.i) * 0.07 + 0.3) + "s";
+        out += `<line data-i="${el.dataset.i}" x1="${px}" y1="${py}" x2="${e.ax}" y2="${e.ay}" stroke="#fff" vector-effect="non-scaling-stroke" style="stroke-width:3.4px;animation-delay:${dl}"/>` +
+          `<line data-i="${el.dataset.i}" x1="${px}" y1="${py}" x2="${e.ax}" y2="${e.ay}" stroke="#1b1b1b" vector-effect="non-scaling-stroke" style="stroke-width:1.3px;animation-delay:${dl}"/>` +
+          (e.d ? "" : `<ellipse cx="${e.ax}" cy="${e.ay}" rx="${0.45 * H / W}" ry="0.45" fill="#1b1b1b" stroke="#fff" stroke-width="0.15"/>`);
+      });
+      svg.innerHTML = out;
+    };
+    let primera = true;
+    function pintar(nk) {
+      if (!primera) SON.swish(); primera = false;
+      k = (nk + l.diapos.length) % l.diapos.length;
+      const d = l.diapos[k];
+      timers.forEach(clearTimeout); timers = []; salirQuiz(lz); lz.classList.remove("dim");
+      const tb = $("#b-tour"); if (tb) tb.textContent = "▶ Recorrer";
+      $$(".et,.mk,.pin", lz).forEach(x => x.remove()); svg.innerHTML = "";
+      l.etiquetas = d.etiquetas;
+      lz.classList.remove("cambia"); void lz.offsetWidth; lz.classList.add("cambia");
+      if (img.getAttribute("src") !== d.img) img.src = d.img;
+      l.etiquetas.forEach((e, i) => {
+        const el = document.createElement("div");
+        el.className = "et " + (e.c || "g"); el.dataset.i = i;
+        el.style.left = e.x + "%"; el.style.top = e.y + "%";
+        el.style.transform = e.al === "r" ? "translate(-100%,-50%)" : e.al === "l" ? "translate(0,-50%)" : "translate(-50%,-50%)";
+        el.style.animationDelay = (0.15 + i * 0.07) + "s";
+        el.innerHTML = (e.n ? `<span class="n">${e.n}</span>` : "") + e.t + (e.s ? `<span class="s">${e.s}</span>` : "");
+        el.onclick = () => { SON.pop(); infoEtiqueta(l, i); };
+        lz.appendChild(el);
+        if (e.d && e.ax !== undefined) {
+          const m = document.createElement("div"); m.className = "mk"; m.textContent = e.d; m.dataset.l = e.d;
+          m.style.left = e.ax + "%"; m.style.top = e.ay + "%"; m.title = "Número clave " + e.d;
+          m.onclick = () => { const li = $(`.ncard[data-l="${e.d}"]`); if (li) { li.scrollIntoView({ behavior: "smooth", block: "center" }); li.classList.add("brilla"); setTimeout(() => li.classList.remove("brilla"), 2000); } };
+          lz.appendChild(m);
+        }
+        if (e.ax !== undefined) { // pin para móvil
+          const p = document.createElement("div"); p.className = "pin movil"; p.textContent = i + 1;
+          p.style.left = e.ax + "%"; p.style.top = e.ay + "%"; p.onclick = () => { SON.pop(); infoEtiqueta(l, i); }; lz.appendChild(p);
+        }
+      });
+      const cap = $("#dcap");
+      if (cap) { cap.innerHTML = (d.titulo && l.diapos.length > 1 ? `<b>${k + 1}. ${d.titulo}</b> ` : "") + (d.texto || ""); cap.style.display = cap.innerHTML ? "" : "none"; enlazar(cap, l); }
+      $$("#dtabs button").forEach(b => b.classList.toggle("on", +b.dataset.k === k));
+      const dc = $("#dcont"); if (dc) dc.textContent = `${k + 1} / ${l.diapos.length}`;
+      const listo = () => requestAnimationFrame(() => requestAnimationFrame(trazar));
+      (img.complete && img.naturalWidth ? Promise.resolve() : img.decode()).then(listo, () => { img.onload = listo; });
+      setTimeout(trazar, 700); // respaldo por si la imagen ya estaba en caché
+    }
+    l.irDiapo = pintar;
+    pintar(0);
+    if (l.diapos.length > 1) {
+      $("#d-prev").onclick = () => pintar(k - 1); $("#d-next").onclick = () => pintar(k + 1);
+      $$("#dtabs button").forEach(b => b.onclick = () => pintar(+b.dataset.k));
+      let x0 = null; // deslizar con el dedo
+      lz.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, { passive: true });
+      lz.addEventListener("touchend", e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) pintar(k + (dx < 0 ? 1 : -1)); x0 = null; });
+      teclas.push(ev => {
+        const r = lz.getBoundingClientRect(); if (r.bottom < 80 || r.top > innerHeight * .6) return false;
+        if (ev.key === "ArrowRight") { ev.preventDefault(); pintar(k + 1); return true; }
+        if (ev.key === "ArrowLeft") { ev.preventDefault(); pintar(k - 1); return true; }
+        return false;
+      });
+    }
+    let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(trazar, 150); });
+    // recorrido guiado (por la imagen visible)
+    $("#b-tour").onclick = () => {
+      salirQuiz(lz);
+      const ets = $$(".et", lz); let i = 0;
+      const paso = () => {
+        $$(".et.foco", lz).forEach(x => x.classList.remove("foco")); $$("line.foco", lz).forEach(x => x.classList.remove("foco"));
+        if (i >= ets.length) {
+          lz.classList.remove("dim"); $("#b-tour").textContent = "▶ Recorrer";
+          if (k < l.diapos.length - 1) luego(() => { pintar(k + 1); luego(() => $("#b-tour").click(), 1200); }, 900); // sigue con la próxima imagen
+          return;
+        }
+        lz.classList.add("dim"); ets[i].classList.add("foco"); $$(`line[data-i="${ets[i].dataset.i}"]`, lz).forEach(x => x.classList.add("foco"));
+        infoEtiqueta(l, +ets[i].dataset.i, true); $("#b-tour").textContent = `⏭ ${i + 1}/${ets.length}` + (l.diapos.length > 1 ? ` · img ${k + 1}` : "");
+        SON.pop(); i++; luego(paso, 3800);
+      };
+      timers.forEach(clearTimeout); timers = []; paso();
+    };
+    $("#b-ocultar").onclick = ev => { const on = ev.target.classList.toggle("on"); lz.classList.toggle("sin-et", on); ev.target.textContent = on ? "👁️ Mostrar etiquetas" : "👁️ Ocultar etiquetas"; };
+    $("#b-quiz").onclick = () => lz.classList.contains("quiz") ? salirQuiz(lz) : quiz(l, lz);
+  }
+
+  function infoEtiqueta(l, i, auto) {
+    const e = l.etiquetas[i], lz = $("#lienzo");
+    if (!auto) { lz.classList.remove("dim"); $$(".et.foco", lz).forEach(x => x.classList.remove("foco")); const el = $(`.et[data-i="${i}"]`, lz); if (el) el.classList.add("foco"); luego(() => el && el.classList.remove("foco"), 2500); }
+    const ns = [...(e.n || "")].map(numCirc).filter(n => n > 0);
+    const qs = ns.map(n => l.preguntas.find(q => q.n === n)).filter(Boolean);
+    const num = e.d ? l.numeros.find(x => x.l === e.d) : null;
+    const box = $("#info");
+    box.innerHTML = `<div class="caja info"><h3>${e.t}</h3>${e.s ? `<p>${e.s.replace(/<br>/g, " · ")}</p>` : ""}
+      ${num ? `<p><span class="lt">${num.l}</span> ${num.html}</p>` : ""}
+      ${qs.map(q => `<div class="qmini"><a class="ref" data-n="${q.n}">${q.n}</a> <b>${q.pregunta}</b> ${badge(q.veces)}<br><span class="r${q.sin_banco ? " sb" : ""}">${q.r}</span></div>`).join("")}</div>`;
+    enlazar(box, l); $$(".ref", box).forEach(a => a.onclick = () => irPregunta(l, +a.dataset.n));
+    if (innerWidth < 1100 && !auto) box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  /* ---------- quiz «¿Dónde está?» ---------- */
+  function quiz(l, lz) {
+    timers.forEach(clearTimeout); timers = []; lz.classList.remove("dim");
+    const con = l.etiquetas.map((e, i) => ({ e, i })).filter(x => x.e.ax !== undefined);
+    if (!con.length) return;
+    lz.classList.add("quiz"); $("#b-quiz").classList.add("on"); $("#b-quiz").textContent = "✖ Salir del juego";
+    con.forEach((x, k) => {
+      const p = document.createElement("div"); p.className = "pin quizpin"; p.textContent = "?"; p.dataset.i = x.i;
+      p.style.left = x.e.ax + "%"; p.style.top = x.e.ay + "%"; lz.appendChild(p);
+    });
+    let orden = con.map(x => x.i).sort(() => Math.random() - .5), aciertos = 0, intentos = 0;
+    const msg = $("#quiz-msg");
+    const pide = () => {
+      if (!orden.length) { SON.fanfarria(); msg.textContent = `🎉 ${aciertos}/${con.length} al primer intento`; toast(`Terminaste: ${aciertos} de ${con.length}`); return; }
+      const e = l.etiquetas[orden[0]]; msg.innerHTML = `Toca: <span style="color:var(--tx)">${e.t}</span>`;
+    };
+    let fallo = false;
+    $$(".quizpin", lz).forEach(p => p.onclick = () => {
+      if (!orden.length || p.classList.contains("bien")) return;
+      const i = +p.dataset.i; intentos++;
+      if (i === orden[0]) {
+        p.classList.add("bien"); p.textContent = "✓"; if (!fallo) aciertos++; fallo = false; if (orden.length > 1) SON.bien();
+        const et = $(`.et[data-i="${i}"]`, lz); if (et) { et.classList.add("revelada"); et.style.animation = "none"; et.style.opacity = 1; }
+        orden.shift(); pide();
+      } else { fallo = true; SON.mal(); p.classList.remove("malo"); void p.offsetWidth; p.classList.add("malo"); }
+    });
+    pide();
+  }
+  function salirQuiz(lz) {
+    lz.classList.remove("quiz"); $$(".quizpin", lz).forEach(p => p.remove()); $$(".et.revelada", lz).forEach(e => e.classList.remove("revelada"));
+    const b = $("#b-quiz"); if (b) { b.classList.remove("on"); b.textContent = "🎯 ¿Dónde está?"; } const m = $("#quiz-msg"); if (m) m.textContent = "";
+  }
+
+  /* ---------- cadena animada ---------- */
+  function montarCadena() {
+    const ps = $("#pasos"), escs = $$(".esc");
+    const todo = () => { ps.classList.remove("oculto"); $$(".paso.activo", ps).forEach(x => x.classList.remove("activo")); escs.forEach(s => s.classList.remove("anim")); };
+    $("#b-todo").onclick = () => { timers.forEach(clearTimeout); timers = []; todo(); };
+    $("#b-play").onclick = () => {
+      timers.forEach(clearTimeout); timers = [];
+      ps.classList.add("oculto"); escs.forEach(s => s.classList.add("anim")); $$(".visto").forEach(x => x.classList.remove("visto", "activo")); $$(".paso.activo").forEach(x => x.classList.remove("activo"));
+      const pasos = $$(".paso", ps); let t = 200;
+      pasos.forEach((p, i) => {
+        const fl = $(`.flecha[data-i="${i}"]`, ps);
+        if (fl) luego(() => fl.classList.add("visto"), t), t += 500;
+        luego(() => { $$(".paso.activo", ps).forEach(x => x.classList.remove("activo")); SON.blip(i); p.classList.add("visto", "activo"); p.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" }); }, t);
+        t += 2600;
+      });
+      luego(() => { $$(".paso.activo", ps).forEach(x => x.classList.remove("activo")); ps.classList.remove("oculto"); }, t);
+      escs.forEach(s => $$("span.e", s).forEach((e, j) => { luego(() => { SON.blip(j); e.classList.add("visto"); }, t); t += 700; }));
+    };
+    $$(".paso", ps).forEach(p => p.onclick = () => { $$(".paso.activo", ps).forEach(x => x.classList.remove("activo")); p.classList.add("activo", "visto"); });
+  }
+
+  /* ---------- fichas de preguntas ---------- */
+  function fichaHTML(q) {
+    const m = marca(q.id);
+    return `<div class="ficha ${q.c}${m === "ok" ? " estado-ok" : ""}" data-n="${q.n}" data-id="${q.id}" data-v="${q.veces}">
+      <div class="giro"><div class="cara frente"><div class="h"><span class="num">${q.n}</span><span>${q.pregunta}</span>${badge(q.veces)}</div>
+        ${q.opciones.length ? `<ol class="op" type="a">${q.opciones.map(o => `<li>${o.replace(/^[a-eA-E][.)]\s*/, "")}</li>`).join("")}</ol>` : ""}<div class="pista">Toca para ver la respuesta ↻</div></div>
+      <div class="cara atras"><div class="h"><span class="num">${q.n}</span><span style="font-weight:600;font-size:14px">${q.pregunta}</span></div>
+        <div class="r${q.sin_banco ? " sb" : ""}">${q.r}</div>${q.ok ? `<div class="ok">${q.ok}</div>` : ""}<div class="x">${q.x}</div>
+        ${q.truco ? `<div class="truco">${q.truco}</div>` : ""}
+        <div class="marcar"><button class="si${m === "ok" ? " on" : ""}" data-v="ok">✓ La sé</button><button class="no${m === "mal" ? " on" : ""}" data-v="mal">✗ Repasar</button></div></div></div></div>`;
+  }
+  function montarFichas(l) {
+    const cont = $("#fichas"), filtros = $("#filtros"), carr = cont.classList.contains("pista-c");
+    const visibles = () => $$(".ficha", cont).filter(f => f.style.display !== "none");
+    const cuenta = () => { const c = $("#cuenta"); if (c) c.textContent = `${visibles().length} de ${l.preguntas.length}`; };
+    let actual = null;
+    cont.onclick = ev => {
+      const b = ev.target.closest(".marcar button"), f = ev.target.closest(".ficha");
+      if (!f || ev.target.closest("a")) return;
+      if (b) { ev.stopPropagation(); marcar(f.dataset.id, b.dataset.v); const m = marca(f.dataset.id);
+        $$(".marcar button", f).forEach(x => x.classList.toggle("on", x.dataset.v === m)); f.classList.toggle("estado-ok", m === "ok");
+        if (m === "ok") SON.bien(); else if (m === "mal") SON.repasar(); else SON.click();
+        if (m === "ok" && l.preguntas.every(q => marca(q.id) === "ok")) { setTimeout(() => SON.fanfarria(), 250); toast("🎉 ¡Dominaste todas las preguntas de esta lámina!"); }
+        else toast(m === "ok" ? "✓ Marcada como sabida" : m === "mal" ? "✗ Para repasar" : "Marca quitada");
+        pintaPuntos(); if (carr && m) setTimeout(() => mover(1), 650); return; }
+      if (carr && f !== actual) { SON.tick(); centrar(f); return; }
+      SON.giro(); f.classList.toggle("vuelta");
+    };
+    function centrar(f, suave = true) { if (!f) return; cont.scrollTo({ left: f.offsetLeft - (cont.clientWidth - f.offsetWidth) / 2, behavior: suave ? "smooth" : "auto" }); }
+    function mover(d) { const v = visibles(); if (!v.length) return; SON.tick(); let k = v.indexOf(actual); k = Math.min(v.length - 1, Math.max(0, (k < 0 ? 0 : k) + d)); centrar(v[k]); }
+    function detectar() {
+      const v = visibles(), mid = cont.scrollLeft + cont.clientWidth / 2;
+      let mejor = null, dist = 1e9;
+      v.forEach(f => { const d = Math.abs(f.offsetLeft + f.offsetWidth / 2 - mid); if (d < dist) { dist = d; mejor = f; } });
+      if (mejor !== actual) { if (actual) actual.classList.remove("actual"); actual = mejor; if (actual) actual.classList.add("actual"); }
+      pintaPuntos();
+    }
+    function pintaPuntos() {
+      if (!carr) return; const v = visibles(), k = v.indexOf(actual), pos = $("#c-pos");
+      if (pos) pos.textContent = v.length ? `Pregunta ${k + 1} de ${v.length}` : "Ninguna con este filtro";
+      const p = $("#puntos"); if (!p) return;
+      p.innerHTML = v.map((f, i) => { const m = marca(f.dataset.id), vz = +f.dataset.v;
+        return `<button class="pt${i === k ? " on" : ""}${m === "ok" ? " ok" : m === "mal" ? " mal" : ""}${vz >= 3 ? " fuego" : ""}" data-k="${i}" title="Pregunta ${f.dataset.n}"></button>`; }).join("");
+      $$(".pt", p).forEach(b => b.onclick = () => centrar(v[+b.dataset.k]));
+      const prev = $("#c-prev"), next = $("#c-next"); if (prev) prev.disabled = k <= 0; if (next) next.disabled = k >= v.length - 1;
+    }
+    if (carr) {
+      let t; cont.addEventListener("scroll", () => { cancelAnimationFrame(t); t = requestAnimationFrame(detectar); });
+      $("#c-prev").onclick = () => mover(-1); $("#c-next").onclick = () => mover(1);
+      let x0 = null, s0 = 0, movio = false;
+      cont.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse" || e.target.closest("button,a")) return; x0 = e.clientX; s0 = cont.scrollLeft; movio = false; });
+      addEventListener("pointermove", e => { if (x0 === null) return; const dx = e.clientX - x0; if (Math.abs(dx) > 6) { movio = true; cont.classList.add("arrastra"); cont.scrollLeft = s0 - dx; } });
+      addEventListener("pointerup", () => { if (x0 === null) return; x0 = null; if (movio) { cont.classList.remove("arrastra"); detectar(); centrar(actual); } });
+      cont.addEventListener("click", e => { if (movio) { e.stopPropagation(); e.preventDefault(); movio = false; } }, true);
+      teclas.push(ev => {
+        const r = cont.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) return false;
+        if (ev.key === "ArrowRight") { ev.preventDefault(); mover(1); }
+        else if (ev.key === "ArrowLeft") { ev.preventDefault(); mover(-1); }
+        else if (ev.key === " " && actual) { ev.preventDefault(); SON.giro(); actual.classList.toggle("vuelta"); }
+        else if ((ev.key === "1" || ev.key === "2") && actual) { actual.classList.add("vuelta"); const b = $(`.marcar button[data-v="${ev.key === "1" ? "ok" : "mal"}"]`, actual); if (b) b.click(); }
+        else return false;
+        return true;
+      });
+      requestAnimationFrame(() => { centrar(visibles()[0], false); detectar(); });
+    }
+    if (filtros) filtros.onclick = ev => {
+      const b = ev.target.closest("button"); if (!b) return;
+      if (b.dataset.f === "voltear") { const alguna = $$(".ficha:not(.vuelta)", cont).length; $$(".ficha", cont).forEach(f => f.classList.toggle("vuelta", !!alguna)); return; }
+      $$("#filtros button").forEach(x => x.classList.toggle("on", x === b));
+      $$(".ficha", cont).forEach(f => {
+        const v = +f.dataset.v, m = marca(f.dataset.id);
+        const ver = { todas: 1, fuego: v >= 3, rep: v >= 2, pend: !m, mal: m === "mal" }[b.dataset.f];
+        f.style.display = ver ? "" : "none";
+      });
+      cuenta(); if (carr) { actual = null; centrar(visibles()[0], false); detectar(); }
+    };
+    cuenta();
+  }
+
+  /* ---------- repaso global ---------- */
+  function vistaRepaso() {
+    const todas = unicas();
+    const peso = x => (marca(x.q.id) === "ok" ? 100 : marca(x.q.id) === "mal" ? -10 : 0) - x.q.veces * 10 + Math.random() * 6;
+    let mazo = todas.slice().sort((a, b) => peso(a) - peso(b)), k = 0;
+    const pinta = () => {
+      const x = mazo[k], q = x.q;
+      vista.innerHTML = `<div class="repaso"><h1>🔥 Repaso <small>primero las que más salen y las que marcaste para repasar</small></h1>
+        <div class="filtros"><span class="cuenta" style="margin-left:0">Pregunta ${k + 1} de ${mazo.length} · Lámina ${x.l.n}: <a href="#/l/${x.l.n}/q${q.n}">${x.l.titulo}</a></span></div>
+        <div class="fichas" id="fichas" style="grid-template-columns:1fr">${fichaHTML(q)}</div>
+        <div class="nav"><button class="btn sec" id="ant">← Anterior</button><a class="btn sec" href="#/l/${x.l.n}/imagen">🖼️ Ver la lámina</a><button class="btn" id="sig">Siguiente →</button></div>
+        <div class="kbd">Teclado: espacio = voltear · → siguiente · ← anterior · 1 = la sé · 2 = repasar</div></div>`;
+      montarFichas(x.l); enlazar(vista, x.l);
+      $$(".ref", vista).forEach(a => a.onclick = ev => { ev.preventDefault(); location.hash = `#/l/${x.l.n}/q${a.dataset.n}`; });
+      $("#ant").onclick = () => { SON.tick(); k = (k - 1 + mazo.length) % mazo.length; pinta(); };
+      $("#sig").onclick = () => { SON.tick(); k = (k + 1) % mazo.length; pinta(); };
+    };
+    pinta();
+    document.onkeydown = ev => {
+      if (ev.target.tagName === "INPUT") return;
+      const f = $(".repaso .ficha"); if (!f) return;
+      if (ev.key === " ") { ev.preventDefault(); SON.giro(); f.classList.toggle("vuelta"); }
+      else if (ev.key === "ArrowRight") $("#sig").click(); else if (ev.key === "ArrowLeft") $("#ant").click();
+      else if (ev.key === "1" || ev.key === "2") { f.classList.add("vuelta"); const b = $(`.marcar button[data-v="${ev.key === "1" ? "ok" : "mal"}"]`, f); b && b.click(); }
+    };
+  }
+
+  ruta();
+})();

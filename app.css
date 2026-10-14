@@ -158,6 +158,11 @@ b.n{color:var(--ok)} b.a{color:var(--mal)} b.b{color:#1565c0}
 .ficha.i .num{background:#2f6db0}.ficha.d .num{background:#8e2c35}
 .badge{font-size:12px;padding:2px 8px;border-radius:999px;color:#fff;white-space:nowrap;margin-left:auto}
 .b2{background:var(--na)}.b3{background:var(--mal)}
+.badges{margin-left:auto;display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}.badges .badge{margin-left:0}
+.bx{background:#5b3fa0}
+.clave{font-size:15px;color:var(--ok);font-weight:600;margin-bottom:4px}
+.exs{font-size:12.5px;color:var(--tx2);border-left:3px solid #5b3fa0;padding:4px 8px;margin-top:6px;background:rgba(91,63,160,.08);border-radius:4px}
+.btn.ex{background:#5b3fa0;margin-left:6px}
 .op{color:var(--tx2);font-size:14px}
 .pista{margin-top:auto;color:var(--tx2);font-size:13px;text-align:center}
 .r{font-size:15px}.r::before{content:"R (banco): ";font-weight:700;color:var(--ok)}

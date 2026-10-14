@@ -72,6 +72,7 @@
   /* ---------- utilidades ---------- */
   const norm = s => (s || "").replace(/<[^>]+>/g, " ").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   const badge = v => v >= 3 ? '<span class="badge b3">🔥 3 veces</span>' : v === 2 ? '<span class="badge b2">🔁 2 veces</span>' : "";
+  const exBadge = q => (q.ex || []).length ? `<span class="badge bx" title="${q.ex.join(" · ")}">📝 Examen${q.ex.length > 1 ? " ×" + q.ex.length : ""}</span>` : "";
   function grupoDe(l) { return A.grupos.find(g => g.id === l.grupo) || A.grupos[0]; }
   function progresoLamina(l) { const ok = l.preguntas.filter(q => marca(q.id) === "ok").length; return [ok, l.preguntas.length]; }
   // convierte ① en enlaces a preguntas y prepara las letras amarillas
@@ -181,12 +182,15 @@
   function vistaInicio() {
     const todas = unicas();
     const ok = todas.filter(x => marca(x.q.id) === "ok").length, fuego = todas.filter(x => x.q.veces >= 3).length, hayRep = todas.some(x => x.q.veces >= 2);
+    const nEx = todas.filter(x => (x.q.ex || []).length).length;
     let h = `<section class="portada"><div class="hola"><h1>${A.titulo}</h1>
       <p>${A.laminas.length} láminas ilustradas que explican ${A.descripcion} (<b>${todas.length} preguntas</b>).
       Toca las etiquetas, reproduce la fisiopatología y voltea las preguntas.</p>
-      <a class="btn" href="#/repaso">${hayRep ? "🔥 Repaso: primero las que más salen" : "🔀 Repaso de todas las preguntas"}</a></div>
+      <a class="btn" href="#/repaso">${hayRep ? "🔥 Repaso: primero las que más salen" : "🔀 Repaso de todas las preguntas"}</a>
+      ${nEx ? `<a class="btn ex" href="#/repaso/examen">📝 Simulacro: solo las ${nEx} que vinieron en exámenes</a>` : ""}</div>
       <div class="stats"><div class="stat"><b>${todas.length}</b><span>preguntas</span></div>
       ${hayRep ? `<div class="stat"><b>${fuego}</b><span>🔥 salieron 3 veces</span></div>` : `<div class="stat"><b>${A.laminas.reduce((s, l) => s + l.diapos.length, 0)}</b><span>🖼️ imágenes anotadas</span></div>`}
+      ${nEx ? `<div class="stat"><b>${nEx}</b><span>📝 vinieron en exámenes</span></div>` : ""}
       <div class="stat"><b>${ok}</b><span>ya dominas</span><div class="barra-prog"><i style="width:${(ok / todas.length * 100).toFixed(1)}%"></i></div></div></div></section>
       <input class="buscar" id="buscar" placeholder="🔎 Busca en las ${todas.length} preguntas (p. ej. ${A.ejemplos || "«Damoiseau», «galope», «facies»"})…" autocomplete="off">
       <div class="resultados" id="resultados"></div>`;
@@ -194,9 +198,9 @@
       const ls = A.laminas.filter(l => l.grupo === g.id); if (!ls.length) continue;
       h += `<h2>${g.icono} ${g.nombre}</h2><div class="grid-lam">`;
       for (const l of ls) {
-        const [o, t] = progresoLamina(l), f3 = l.preguntas.filter(q => q.veces >= 3).length;
+        const [o, t] = progresoLamina(l), f3 = l.preguntas.filter(q => q.veces >= 3).length, fx = l.preguntas.filter(q => (q.ex || []).length).length;
         h += `<a class="tarj" href="#/l/${l.n}"><div class="mini" style="background-image:url('${l.img}')"><span>Lámina ${l.n}</span></div>
-          <div class="cuerpo"><b>${l.titulo}</b><div class="meta"><span>❓ ${t} preguntas</span>${f3 ? `<span>🔥 ${f3}</span>` : ""}<span>✓ ${o}</span></div>
+          <div class="cuerpo"><b>${l.titulo}</b><div class="meta"><span>❓ ${t} preguntas</span>${f3 ? `<span>🔥 ${f3}</span>` : ""}${fx ? `<span>📝 ${fx}</span>` : ""}<span>✓ ${o}</span></div>
           <div class="barra-prog"><i style="width:${(o / t * 100).toFixed(0)}%"></i></div></div></a>`;
       }
       h += "</div>";
@@ -206,7 +210,7 @@
     inp.oninput = () => {
       const t = norm(inp.value.trim()); if (t.length < 3) { res.innerHTML = ""; return; }
       const hs = todas.filter(x => norm(x.q.pregunta + " " + x.q.r + " " + x.q.x).includes(t)).slice(0, 30);
-      res.innerHTML = hs.map(x => `<a href="#/l/${x.l.n}/q${x.q.n}"><b>${x.q.pregunta}</b><br><small>Lámina ${x.l.n} · ${x.l.titulo} ${x.q.veces >= 3 ? "· 🔥" : x.q.veces === 2 ? "· 🔁" : ""}</small></a>`).join("")
+      res.innerHTML = hs.map(x => `<a href="#/l/${x.l.n}/q${x.q.n}"><b>${x.q.pregunta}</b><br><small>Lámina ${x.l.n} · ${x.l.titulo} ${x.q.veces >= 3 ? "· 🔥" : x.q.veces === 2 ? "· 🔁" : ""}${(x.q.ex || []).length ? " · 📝 " + x.q.ex.join(", ") : ""}</small></a>`).join("")
         || "<small>Sin resultados.</small>";
     };
   }
@@ -250,7 +254,7 @@
     }
     h += `<h2 id="preguntas">❓ Las preguntas del banco que responde</h2>
       <div class="filtros" id="filtros"><button data-f="todas" class="on">Todas</button><button data-f="fuego">🔥 3 veces</button>
-      <button data-f="rep">🔁 2+ veces</button><button data-f="pend">Pendientes</button><button data-f="mal">✗ Para repasar</button>
+      <button data-f="rep">🔁 2+ veces</button><button data-f="exa">📝 De examen</button><button data-f="pend">Pendientes</button><button data-f="mal">✗ Para repasar</button>
       <button data-f="voltear">↻ Voltear todas</button><span class="cuenta" id="cuenta"></span></div>
       <div class="carrusel"><button class="cnav prev" id="c-prev" title="Anterior (←)">‹</button>
       <div class="pista-c" id="fichas">${l.preguntas.map(fichaHTML).join("")}</div>
@@ -438,11 +442,13 @@
   /* ---------- fichas de preguntas ---------- */
   function fichaHTML(q) {
     const m = marca(q.id);
-    return `<div class="ficha ${q.c}${m === "ok" ? " estado-ok" : ""}" data-n="${q.n}" data-id="${q.id}" data-v="${q.veces}">
-      <div class="giro"><div class="cara frente"><div class="h"><span class="num">${q.n}</span><span>${q.pregunta}</span>${badge(q.veces)}</div>
+    return `<div class="ficha ${q.c}${m === "ok" ? " estado-ok" : ""}" data-n="${q.n}" data-id="${q.id}" data-v="${q.veces}" data-x="${(q.ex || []).length}">
+      <div class="giro"><div class="cara frente"><div class="h"><span class="num">${q.n}</span><span>${q.pregunta}</span><span class="badges">${exBadge(q)}${badge(q.veces)}</span></div>
         ${q.opciones.length ? `<ol class="op" type="a">${q.opciones.map(o => `<li>${o.replace(/^[a-eA-E][.)]\s*/, "")}</li>`).join("")}</ol>` : ""}<div class="pista">Toca para ver la respuesta ↻</div></div>
       <div class="cara atras"><div class="h"><span class="num">${q.n}</span><span style="font-weight:600;font-size:14px">${q.pregunta}</span></div>
+        ${q.letra ? `<div class="clave">✅ Alternativa <b>${q.letra})</b> ${q.opciones["abcde".indexOf(q.letra)].replace(/^[a-eA-E][.)]\s*/, "")}</div>` : ""}
         <div class="r${q.sin_banco ? " sb" : ""}">${q.r}</div>${q.ok ? `<div class="ok">${q.ok}</div>` : ""}<div class="x">${q.x}</div>
+        ${(q.ex || []).length ? `<div class="exs">📝 <b>Salió en:</b> ${q.ex.join(" · ")}${q.nex ? `<br>${q.nex}` : ""}</div>` : ""}
         ${q.truco ? `<div class="truco">${q.truco}</div>` : ""}
         <div class="marcar"><button class="si${m === "ok" ? " on" : ""}" data-v="ok">✓ La sé</button><button class="no${m === "mal" ? " on" : ""}" data-v="mal">✗ Repasar</button></div></div></div></div>`;
   }
@@ -506,7 +512,7 @@
       $$("#filtros button").forEach(x => x.classList.toggle("on", x === b));
       $$(".ficha", cont).forEach(f => {
         const v = +f.dataset.v, m = marca(f.dataset.id);
-        const ver = { todas: 1, fuego: v >= 3, rep: v >= 2, pend: !m, mal: m === "mal" }[b.dataset.f];
+        const ver = { todas: 1, fuego: v >= 3, rep: v >= 2, exa: +f.dataset.x > 0, pend: !m, mal: m === "mal" }[b.dataset.f];
         f.style.display = ver ? "" : "none";
       });
       cuenta(); if (carr) { actual = null; centrar(visibles()[0], false); detectar(); }
@@ -515,13 +521,14 @@
   }
 
   /* ---------- repaso global ---------- */
-  function vistaRepaso() {
-    const todas = unicas();
-    const peso = x => (marca(x.q.id) === "ok" ? 100 : marca(x.q.id) === "mal" ? -10 : 0) - x.q.veces * 10 + Math.random() * 6;
+  function vistaRepaso(modo) {
+    const exa = modo === "examen";
+    const todas = exa ? unicas().filter(x => (x.q.ex || []).length) : unicas();
+    const peso = x => (marca(x.q.id) === "ok" ? 100 : marca(x.q.id) === "mal" ? -10 : 0) - x.q.veces * 10 - (x.q.ex || []).length * 10 + Math.random() * 6;
     let mazo = todas.slice().sort((a, b) => peso(a) - peso(b)), k = 0;
     const pinta = () => {
       const x = mazo[k], q = x.q;
-      vista.innerHTML = `<div class="repaso"><h1>🔥 Repaso <small>primero las que más salen y las que marcaste para repasar</small></h1>
+      vista.innerHTML = `<div class="repaso"><h1>${exa ? "📝 Simulacro de examen <small>solo preguntas que vinieron en exámenes anteriores, con sus alternativas</small>" : "🔥 Repaso <small>primero las que más salen y las que marcaste para repasar</small>"}</h1>
         <div class="filtros"><span class="cuenta" style="margin-left:0">Pregunta ${k + 1} de ${mazo.length} · Lámina ${x.l.n}: <a href="#/l/${x.l.n}/q${q.n}">${x.l.titulo}</a></span></div>
         <div class="fichas" id="fichas" style="grid-template-columns:1fr">${fichaHTML(q)}</div>
         <div class="nav"><button class="btn sec" id="ant">← Anterior</button><a class="btn sec" href="#/l/${x.l.n}/imagen">🖼️ Ver la lámina</a><button class="btn" id="sig">Siguiente →</button></div>

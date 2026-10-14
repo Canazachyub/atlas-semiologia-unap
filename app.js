@@ -3,6 +3,7 @@
   "use strict";
   const A = window.ATLAS, $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const vista = $("#vista");
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual"; // al recargar manda la ruta, no la posición vieja
   document.title = A.titulo; { const m = $(".marca span"); if (m) m.textContent = A.marca; }
   const CIRC = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚㉛㉜㉝㉞㉟";
   const numCirc = ch => CIRC.indexOf(ch) + 1;
@@ -67,7 +68,19 @@
       despertar: () => c(),
     };
   })();
-  function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("ver"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("ver"), 1800); }
+  // celebración: estrellas que saltan desde un elemento (respeta «reducir movimiento»)
+  function chispas(el, n = 14) {
+    if (!el || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement("span"), a = Math.random() * Math.PI * 2, d = 50 + Math.random() * 90;
+      s.className = "chispa"; s.textContent = ["⭐", "✨", "🌟"][i % 3];
+      s.style.left = x + "px"; s.style.top = y + "px";
+      s.style.setProperty("--dx", Math.cos(a) * d + "px"); s.style.setProperty("--dy", Math.sin(a) * d - 30 + "px"); s.style.setProperty("--rot", (Math.random() * 360 | 0) + "deg");
+      document.body.appendChild(s); setTimeout(() => s.remove(), 950);
+    }
+  }
+  function toast(t, cls = "") { const el = $("#toast"); el.textContent = t; el.className = cls; void el.offsetWidth; el.classList.add("ver"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("ver"), 1800); }
 
   /* ---------- utilidades ---------- */
   const norm = s => (s || "").replace(/<[^>]+>/g, " ").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -95,8 +108,13 @@
     const f = $(`.ficha[data-n="${n}"]`);
     if (!f) return;
     if (f.style.display === "none") { const b0 = $("#filtros button"); if (b0) b0.click(); }
-    f.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-    f.classList.add("resalta", "vuelta"); setTimeout(() => f.classList.remove("resalta"), 2200);
+    // el carrusel se centra en horizontal y la página baja en vertical (scrollIntoView falla con el carrusel)
+    const c = f.parentElement;
+    if (c.classList.contains("pista-c")) c.scrollTo({ left: f.offsetLeft - (c.clientWidth - f.offsetWidth) / 2, behavior: "smooth" });
+    const baja = () => window.scrollTo({ top: f.getBoundingClientRect().top + scrollY - Math.max(90, (innerHeight - f.offsetHeight) / 2), behavior: "smooth" });
+    baja(); setTimeout(baja, 700);
+    if (!f.classList.contains("mc")) f.classList.add("vuelta");
+    f.classList.add("resalta"); setTimeout(() => f.classList.remove("resalta"), 2200);
   }
   function brillaLetra(L) {
     const m = $(`.mk[data-l="${L}"]`); if (!m) return;
@@ -221,8 +239,8 @@
     let h = `<style>${l.css || ""}</style><div class="migas"><a href="#/">← Láminas</a> · ${g.icono} ${g.nombre}</div>
       <h1>Lámina ${l.n} · ${l.titulo} <small>${l.subtitulo}</small></h1><div class="lema">${l.lema}</div>
       <nav class="pestanas"><a href="#/l/${l.n}/imagen">🖼️ Imagen</a>${l.cadena ? `<a href="#/l/${l.n}/cadena">⚙️ ${l.cadena.titulo}</a>` : ""}
-      <a href="#/l/${l.n}/preguntas">❓ Preguntas (${l.preguntas.length})</a>${l.escalas && l.escalas.length ? `<a href="#/l/${l.n}/escalas">📏 Escalas (${l.escalas.length})</a>` : ""}${l.tabla ? `<a href="#/l/${l.n}/tabla">📋 Tabla</a>` : ""}
-      ${l.n > 1 && porN[l.n - 1] ? `<a href="#/l/${l.n - 1}">← ${l.n - 1}</a>` : ""}${porN[l.n + 1] ? `<a href="#/l/${l.n + 1}">${l.n + 1} →</a>` : ""}</nav>
+      <a href="#/l/${l.n}/preguntas">❓ Preguntas <span class="prog" id="prog-l">${progresoLamina(l)[0]}/${l.preguntas.length} ✓</span></a>${l.escalas && l.escalas.length ? `<a href="#/l/${l.n}/escalas">📏 Escalas (${l.escalas.length})</a>` : ""}${l.tabla ? `<a href="#/l/${l.n}/tabla">📋 Tabla</a>` : ""}
+      ${l.n > 1 && porN[l.n - 1] ? `<a class="nav-l" href="#/l/${l.n - 1}" title="${porN[l.n - 1].titulo}">← ${l.n - 1}</a>` : ""}${porN[l.n + 1] ? `<a class="nav-l" href="#/l/${l.n + 1}" title="${porN[l.n + 1].titulo}">${l.n + 1} →</a>` : ""}</nav>
       <section id="imagen" class="zona"><div><div class="marco">
         <div class="controles"><button class="btn chico" id="b-tour">▶ Recorrer</button><button class="btn chico sec" id="b-quiz">🎯 ¿Dónde está?</button>
         <button class="btn chico sec" id="b-ocultar">👁️ Ocultar etiquetas</button><span class="quiz-msg" id="quiz-msg"></span></div>
@@ -259,7 +277,7 @@
       <div class="carrusel"><button class="cnav prev" id="c-prev" title="Anterior (←)">‹</button>
       <div class="pista-c" id="fichas">${l.preguntas.map(fichaHTML).join("")}</div>
       <button class="cnav next" id="c-next" title="Siguiente (→)">›</button></div>
-      <div class="c-pie"><span id="c-pos"></span><div class="puntos" id="puntos"></div><span class="kbd">← → mover · espacio voltear · 1 la sé · 2 repasar</span></div>`;
+      <div class="c-pie"><span id="c-pos"></span><div class="puntos" id="puntos"></div><span class="kbd">← → mover · espacio voltear · a–e elegir alternativa · 1 la sé · 2 repasar</span></div>`;
     if (l.tabla) h += `<h2 id="tabla">📋 Tabla comparativa</h2><div class="tabla-wrap"><table class="tabla"><tr>${l.tabla.cab.map(x => `<th>${x}</th>`).join("")}</tr>
       ${l.tabla.filas.map(f => `<tr>${f.map(x => `<td>${x}</td>`).join("")}</tr>`).join("")}</table></div>`;
     vista.innerHTML = h;
@@ -272,6 +290,12 @@
       const id = a.getAttribute("href").split("/").pop(); const el = document.getElementById(id);
       if (el) { ev.preventDefault(); el.scrollIntoView({ behavior: "smooth" }); history.replaceState(null, "", a.getAttribute("href")); }
     });
+    // la pestaña de la sección que se está leyendo queda marcada
+    const secs = $$(".pestanas a[href*='/" + l.n + "/']").map(a => [a, document.getElementById(a.getAttribute("href").split("/").pop())]).filter(x => x[1])
+      .sort((p, q) => p[1].compareDocumentPosition(q[1]) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+    const espia = () => { let act = secs[0]; for (const x of secs) if (x[1].getBoundingClientRect().top < 160) act = x;
+      secs.forEach(x => x[0].classList.toggle("act", x === act)); };
+    removeEventListener("scroll", window.__espia || (() => {})); window.__espia = espia; addEventListener("scroll", espia, { passive: true }); espia();
     if (sub) setTimeout(() => {
       if (/^q\d+$/.test(sub)) irPregunta(l, +sub.slice(1));
       else { const el = document.getElementById(sub); if (el) el.scrollIntoView({ behavior: "smooth" }); }
@@ -440,33 +464,72 @@
   }
 
   /* ---------- fichas de preguntas ---------- */
+  const sinLetra = o => o.replace(/^[a-eA-E][.)]\s*/, "");
+  const marcarBtns = m => `<div class="marcar"><button class="si${m === "ok" ? " on" : ""}" data-v="ok">✓ La sé</button><button class="no${m === "mal" ? " on" : ""}" data-v="mal">✗ Repasar</button></div>`;
+  const exHTML = q => (q.ex || []).length ? `<div class="exs">📝 <b>Salió en:</b> ${q.ex.join(" · ")}${q.nex ? `<br>${q.nex}` : ""}</div>` : "";
+  // opción múltiple: se elige una alternativa, se corrige y cada alternativa muestra su porqué debajo
+  function mcHTML(q) {
+    const m = marca(q.id), L = "abcde";
+    return `<div class="ficha mc ${q.c}${m === "ok" ? " estado-ok" : ""}" data-n="${q.n}" data-id="${q.id}" data-v="${q.veces}" data-x="${(q.ex || []).length}" data-letra="${q.letra}">
+      <div class="mcq"><div class="h"><span class="num">${q.n}</span><span>${q.pregunta}</span><span class="badges">${exBadge(q)}${badge(q.veces)}</span></div>
+      <div class="ops">${q.opciones.map((o, i) => `<div class="opw${L[i] === q.letra ? " es" : ""}" data-k="${L[i]}">
+        <button class="opc"><span class="ltr">${L[i]}</span><span class="otx">${sinLetra(o)}</span><span class="ico"></span></button>
+        ${(q.porq || {})[L[i]] ? `<div class="porq">${q.porq[L[i]]}</div>` : ""}</div>`).join("")}</div>
+      <div class="pista">Elige una alternativa · <a href="#" class="ver-r">ver la respuesta</a></div>
+      <div class="mc-res">${q.clave ? `<div class="clave-mc">🎯 <b>Para resolverla:</b> ${q.clave}</div>` : ""}
+        ${q.aviso ? `<div class="aviso">⚠️ ${q.aviso}</div>` : ""}<div class="r${q.sin_banco ? " sb" : ""}">${q.r}</div>${q.ok ? `<div class="ok">${q.ok}</div>` : ""}
+        ${q.porq ? "" : `<div class="x">${q.x}</div>`}${exHTML(q)}${q.truco ? `<div class="truco">${q.truco}</div>` : ""}
+        <div class="mc-pie"><button class="reint">↺ Intentar de nuevo</button>${marcarBtns(m)}</div></div></div></div>`;
+  }
   function fichaHTML(q) {
+    if (q.opciones.length && q.letra) return mcHTML(q);
     const m = marca(q.id);
     return `<div class="ficha ${q.c}${m === "ok" ? " estado-ok" : ""}" data-n="${q.n}" data-id="${q.id}" data-v="${q.veces}" data-x="${(q.ex || []).length}">
       <div class="giro"><div class="cara frente"><div class="h"><span class="num">${q.n}</span><span>${q.pregunta}</span><span class="badges">${exBadge(q)}${badge(q.veces)}</span></div>
-        ${q.opciones.length ? `<ol class="op" type="a">${q.opciones.map(o => `<li>${o.replace(/^[a-eA-E][.)]\s*/, "")}</li>`).join("")}</ol>` : ""}<div class="pista">Toca para ver la respuesta ↻</div></div>
+        ${q.opciones.length ? `<ol class="op" type="a">${q.opciones.map(o => `<li>${sinLetra(o)}</li>`).join("")}</ol>` : ""}<div class="pista">Toca para ver la respuesta ↻</div></div>
       <div class="cara atras"><div class="h"><span class="num">${q.n}</span><span style="font-weight:600;font-size:14px">${q.pregunta}</span></div>
-        ${q.letra ? `<div class="clave">✅ Alternativa <b>${q.letra})</b> ${q.opciones["abcde".indexOf(q.letra)].replace(/^[a-eA-E][.)]\s*/, "")}</div>` : ""}
-        <div class="r${q.sin_banco ? " sb" : ""}">${q.r}</div>${q.ok ? `<div class="ok">${q.ok}</div>` : ""}<div class="x">${q.x}</div>
-        ${(q.ex || []).length ? `<div class="exs">📝 <b>Salió en:</b> ${q.ex.join(" · ")}${q.nex ? `<br>${q.nex}` : ""}</div>` : ""}
-        ${q.truco ? `<div class="truco">${q.truco}</div>` : ""}
-        <div class="marcar"><button class="si${m === "ok" ? " on" : ""}" data-v="ok">✓ La sé</button><button class="no${m === "mal" ? " on" : ""}" data-v="mal">✗ Repasar</button></div></div></div></div>`;
+                <div class="r${q.sin_banco ? " sb" : ""}">${q.r}</div>${q.ok ? `<div class="ok">${q.ok}</div>` : ""}<div class="x">${q.x}</div>
+        ${exHTML(q)}${q.truco ? `<div class="truco">${q.truco}</div>` : ""}
+        ${marcarBtns(m)}</div></div></div>`;
   }
   function montarFichas(l) {
     const cont = $("#fichas"), filtros = $("#filtros"), carr = cont.classList.contains("pista-c");
     const visibles = () => $$(".ficha", cont).filter(f => f.style.display !== "none");
     const cuenta = () => { const c = $("#cuenta"); if (c) c.textContent = `${visibles().length} de ${l.preguntas.length}`; };
     let actual = null;
+    const fijar = (id, v) => { P.q = P.q || {}; P.q[id] = v; guardar(P); progChip(); };
+    const progChip = () => { const c = $("#prog-l"); if (c) c.textContent = `${progresoLamina(l)[0]}/${l.preguntas.length} ✓`; };
+    function responder(f, k) {
+      if (f.classList.contains("respondida")) return;
+      const ok = k === f.dataset.letra;
+      f.classList.add("respondida");
+      if (k) { const w = $(`.opw[data-k="${k}"]`, f); w.classList.add("elegida", ok ? "bien" : "malo"); }
+      if (k) { fijar(f.dataset.id, ok ? "ok" : "mal"); const m = marca(f.dataset.id);
+        $$(".marcar button", f).forEach(x => x.classList.toggle("on", x.dataset.v === m)); f.classList.toggle("estado-ok", ok);
+        if (ok) { SON.bien(); toast("⭐ ¡Correcta!", "bien"); chispas($(`.opw[data-k="${k}"] .opc`, f)); }
+        else { SON.repasar(); toast(`Casi: era la ${f.dataset.letra}). Lee el porqué de cada una 👇`, "casi"); }
+        pintaPuntos(); }
+      else SON.giro();
+    }
     cont.onclick = ev => {
       const b = ev.target.closest(".marcar button"), f = ev.target.closest(".ficha");
-      if (!f || ev.target.closest("a")) return;
+      if (!f) return;
+      if (carr && f !== actual) { ev.preventDefault(); SON.tick(); centrar(f); return; }
+      if (f.classList.contains("mc")) {
+        const o = ev.target.closest(".opc");
+        if (o) { ev.stopPropagation(); responder(f, o.parentElement.dataset.k); return; }
+        if (ev.target.closest(".ver-r")) { ev.preventDefault(); responder(f, ""); return; }
+        if (ev.target.closest(".reint")) { f.classList.remove("respondida"); $$(".opw", f).forEach(w => w.classList.remove("elegida", "bien", "malo")); SON.click(); return; }
+        if (!b) return;
+      }
+      if (ev.target.closest("a")) return;
       if (b) { ev.stopPropagation(); marcar(f.dataset.id, b.dataset.v); const m = marca(f.dataset.id);
         $$(".marcar button", f).forEach(x => x.classList.toggle("on", x.dataset.v === m)); f.classList.toggle("estado-ok", m === "ok");
         if (m === "ok") SON.bien(); else if (m === "mal") SON.repasar(); else SON.click();
         if (m === "ok" && l.preguntas.every(q => marca(q.id) === "ok")) { setTimeout(() => SON.fanfarria(), 250); toast("🎉 ¡Dominaste todas las preguntas de esta lámina!"); }
-        else toast(m === "ok" ? "✓ Marcada como sabida" : m === "mal" ? "✗ Para repasar" : "Marca quitada");
-        pintaPuntos(); if (carr && m) setTimeout(() => mover(1), 650); return; }
-      if (carr && f !== actual) { SON.tick(); centrar(f); return; }
+        else toast(m === "ok" ? "✓ Marcada como sabida" : m === "mal" ? "📌 Queda para repasar" : "Marca quitada", m === "ok" ? "bien" : "");
+        if (m === "ok") chispas(b, 10);
+        pintaPuntos(); progChip(); if (carr && m) setTimeout(() => mover(1), 650); return; }
       SON.giro(); f.classList.toggle("vuelta");
     };
     function centrar(f, suave = true) { if (!f) return; cont.scrollTo({ left: f.offsetLeft - (cont.clientWidth - f.offsetWidth) / 2, behavior: suave ? "smooth" : "auto" }); }
@@ -499,7 +562,8 @@
         const r = cont.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) return false;
         if (ev.key === "ArrowRight") { ev.preventDefault(); mover(1); }
         else if (ev.key === "ArrowLeft") { ev.preventDefault(); mover(-1); }
-        else if (ev.key === " " && actual) { ev.preventDefault(); SON.giro(); actual.classList.toggle("vuelta"); }
+        else if (ev.key === " " && actual) { ev.preventDefault(); if (actual.classList.contains("mc")) responder(actual, ""); else { SON.giro(); actual.classList.toggle("vuelta"); } }
+        else if (/^[a-e]$/i.test(ev.key) && actual && actual.classList.contains("mc") && $(`.opw[data-k="${ev.key.toLowerCase()}"]`, actual)) { ev.preventDefault(); responder(actual, ev.key.toLowerCase()); }
         else if ((ev.key === "1" || ev.key === "2") && actual) { actual.classList.add("vuelta"); const b = $(`.marcar button[data-v="${ev.key === "1" ? "ok" : "mal"}"]`, actual); if (b) b.click(); }
         else return false;
         return true;

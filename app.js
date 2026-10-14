@@ -104,6 +104,94 @@
     $$(".ref", root).forEach(a => a.onclick = ev => { ev.preventDefault(); irPregunta(l, +a.dataset.n); });
     $$(".lt2,.lt", root).forEach(s => { s.dataset.l = s.textContent.trim(); s.onclick = () => { SON.pop(); brillaLetra(s.dataset.l); }; });
   }
+  // siglas: la primera vez que aparece cada una en la vista va con su significado; las demás, con el significado al pasar el cursor
+  const SIG = A.siglas || {}, reSig = Object.keys(SIG).length ? new RegExp("(^|[^\\wÁÉÍÓÚÑáéíóúñ])(" + Object.keys(SIG).sort((a, b) => b.length - a.length).map(x => x.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&")).join("|") + ")(?![\\wÁÉÍÓÚÑáéíóúñ])", "g") : null;
+  function siglas(root) {
+    if (!reSig) return;
+    const vistas = new Set(), w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n =>
+      n.parentElement.closest("a,.et,.mk,.pin,script,style,svg,abbr,.regla-box,button,.badge") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    const nodos = []; while (w.nextNode()) { reSig.lastIndex = 0; if (reSig.test(w.currentNode.nodeValue)) nodos.push(w.currentNode); }
+    for (const t of nodos) {
+      const txt = t.nodeValue, frag = document.createDocumentFragment(); let i = 0; reSig.lastIndex = 0; let m;
+      while ((m = reSig.exec(txt))) {
+        const ini = m.index + m[1].length, s = m[2];
+        // «grado IV a VI», «V fortísimo, VI audible»: si el texto trae otros números romanos, VI es un grado, no el ventrículo
+        if (/^[IVX]+$/.test(s) && /(^|[^\wÁÉÍÓÚ])(I{1,3}|IV|V)(?![\wÁÉÍÓÚ])/.test(txt.slice(0, ini) + " " + txt.slice(ini + s.length))) continue;
+        frag.appendChild(document.createTextNode(txt.slice(i, ini)));
+        const ab = document.createElement("abbr"); ab.className = "sigla"; ab.setAttribute("aria-label", s + ": " + SIG[s]); ab.tabIndex = 0; ab.textContent = s; frag.appendChild(ab);
+        // ya explicada si el texto que sigue la desarrolla entre paréntesis o si antes vino el nombre completo
+        const yaDicho = txt.slice(Math.max(0, ini - SIG[s].length - 4), ini).toLowerCase().includes(SIG[s].toLowerCase().slice(0, 12));
+        if (t.parentElement.closest("h1,h2,h3")) { i = ini + s.length; continue; }  // en títulos, solo la sigla con su significado al pasar
+        if (!vistas.has(s) && !yaDicho && !/^\s*\(/.test(txt.slice(ini + s.length))) {
+          const e = document.createElement("span"); e.className = "sig-exp"; e.textContent = ` (${SIG[s]})`; frag.appendChild(e);
+        }
+        vistas.add(s); i = ini + s.length;
+      }
+      frag.appendChild(document.createTextNode(txt.slice(i))); t.parentNode.replaceChild(frag, t);
+    }
+  }
+  /* ---------- conceptos tipo Wikipedia: tarjeta al pasar el cursor o al tocar ---------- */
+  const CON = A.conceptos || {}, aliasDe = {};
+  for (const [k, c] of Object.entries(CON)) for (const al of [k, ...(c.alias || [])]) { aliasDe[al] = k; aliasDe[al[0].toUpperCase() + al.slice(1)] ??= k; }
+  const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const reCon = Object.keys(aliasDe).length ? new RegExp("(^|[^\\wÁÉÍÓÚÑáéíóúñ-])(" + Object.keys(aliasDe).sort((a, b) => b.length - a.length).map(escRe).join("|") + ")(?![\\wÁÉÍÓÚÑáéíóúñ-])", "g") : null;
+  const BLOQUE = ".lema,.caja,.paso,.extra>div,.esc,.ncard,.recordar,.cara.atras,.mc-res,.porq,td,.dcap,.escala,.qmini,p";
+  function conceptos(root) {
+    if (!reCon) return;
+    const usados = new Map(), w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n =>
+      n.parentElement.closest(".et,.mk,.pin,script,style,svg,abbr,button,.badge,a,h1,h2,h3,.cara.frente,.mcq>.h,.opc,.con,.pista") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    const nodos = []; while (w.nextNode()) { reCon.lastIndex = 0; if (reCon.test(w.currentNode.nodeValue)) nodos.push(w.currentNode); }
+    for (const t of nodos) {
+      const bloque = t.parentElement.closest(BLOQUE) || root; if (!usados.has(bloque)) usados.set(bloque, new Set());
+      const ya = usados.get(bloque), txt = t.nodeValue, frag = document.createDocumentFragment(); let i = 0, m, cambio = false; reCon.lastIndex = 0;
+      while ((m = reCon.exec(txt))) {
+        const ini = m.index + m[1].length, k = aliasDe[m[2]];
+        if (!k || ya.has(k)) continue;              // una vez por bloque, como un enlace de Wikipedia
+        ya.add(k); cambio = true;
+        frag.appendChild(document.createTextNode(txt.slice(i, ini)));
+        const sp = document.createElement("span"); sp.className = "con"; sp.dataset.k = k; sp.tabIndex = 0; sp.textContent = m[2]; frag.appendChild(sp);
+        i = ini + m[2].length;
+      }
+      if (!cambio) continue;
+      frag.appendChild(document.createTextNode(txt.slice(i))); t.parentNode.replaceChild(frag, t);
+    }
+  }
+  const pop = document.createElement("div"); pop.id = "pop"; pop.setAttribute("role", "tooltip"); document.body.appendChild(pop);
+  let popEl = null, popT = 0, fijo = false;
+  function popHTML(el) {
+    if (el.classList.contains("sigla")) return `<div class="ph"><b>${el.textContent}</b><span class="pt-tipo">sigla</span><button class="pcerrar" aria-label="Cerrar">✕</button></div><p>${SIG[el.textContent] || ""}</p>`;
+    const c = CON[el.dataset.k]; if (!c) return "";
+    return `<div class="ph"><b>${el.dataset.k}</b><button class="pcerrar" aria-label="Cerrar">✕</button></div><p>${c.def}</p>
+      ${c.clave ? `<p class="pclave">🔑 ${c.clave}</p>` : ""}${c.ejemplo ? `<p class="pej">🩺 <i>Ejemplo:</i> ${c.ejemplo}</p>` : ""}
+      ${c.lit ? `<p class="plit">📚 Dato de literatura; tu teoría no lo detalla.</p>` : ""}`;
+  }
+  function mostrar(el, fijar) {
+    const h = popHTML(el); if (!h) return;
+    popEl = el; fijo = !!fijar; pop.innerHTML = h; pop.classList.add("ver"); pop.classList.toggle("fijo", fijo);
+    if (innerWidth < 820) { pop.classList.add("hoja"); pop.style.left = pop.style.top = ""; return; }
+    pop.classList.remove("hoja");
+    const r = el.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let x = Math.min(innerWidth - pw - 10, Math.max(10, r.left + r.width / 2 - pw / 2)), y = r.bottom + 8;
+    if (y + ph > innerHeight - 10) y = r.top - ph - 8;
+    pop.style.left = x + "px"; pop.style.top = y + "px";
+  }
+  function ocultar() { pop.classList.remove("ver", "fijo"); popEl = null; fijo = false; }
+  document.addEventListener("mouseover", ev => {
+    const el = ev.target.closest(".con,abbr.sigla"); clearTimeout(popT);
+    if (el && el !== popEl) popT = setTimeout(() => mostrar(el), 220);
+    else if (!el && !fijo && !ev.target.closest("#pop")) popT = setTimeout(ocultar, 180);
+  });
+  document.addEventListener("click", ev => {
+    clearTimeout(popT);
+    const el = ev.target.closest(".con,abbr.sigla");
+    if (el && el.closest("a,button")) return;
+    if (el) { ev.preventDefault(); ev.stopPropagation(); SON.pop(); if (popEl === el && fijo) ocultar(); else mostrar(el, true); return; }
+    if (ev.target.closest(".pcerrar") || !ev.target.closest("#pop")) ocultar();
+  }, true);
+  document.addEventListener("focusin", ev => { const el = ev.target.closest && ev.target.closest(".con,abbr.sigla"); if (el) mostrar(el); });
+  addEventListener("scroll", () => { if (popEl && !fijo && innerWidth >= 820) ocultar(); }, { passive: true });
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape") ocultar(); });
+
   function irPregunta(l, n) {
     const f = $(`.ficha[data-n="${n}"]`);
     if (!f) return;
@@ -168,7 +256,7 @@
     const filasItem = txt => {
       const partes = txt.split(" · ");
       const conPunt = partes.every(p => /^([0-9]+|[IVX]+|[+]+|[0-9]+[+])\s/.test(p));
-      if (!conPunt) return `<tr><td colspan="2" class="libre">${partes.join(" · ")}</td></tr>`;
+      if (!conPunt) return `<tr><td colspan="2" class="e-libre">${partes.join(" · ")}</td></tr>`;
       return partes.map(p => { const m = p.match(/^(\S+)\s+(.*)$/); return `<tr><td class="pz">${m[1]}</td><td>${m[2]}</td></tr>`; }).join("");
     };
     const items = s.items.map(([a, b]) => `<tbody><tr class="sub"><th colspan="2">${a}</th></tr>${filasItem(b)}</tbody>`).join("");
@@ -192,7 +280,11 @@
   addEventListener("hashchange", ruta);
   let timers = [];
   let teclas = [];
-  function detenerTodo() { timers.forEach(clearTimeout); timers = []; teclas = []; document.onkeydown = null; }
+  function detenerTodo() { timers.forEach(clearTimeout); timers = []; teclas = []; document.onkeydown = null; ocultar();
+    if (window.__espia) { removeEventListener("scroll", window.__espia); window.__espia = null; } }
+  // los atajos no deben pisar Ctrl+C, Alt+←, escribir en el buscador ni el espacio sobre un botón enfocado
+  const sinAtajo = ev => ev.ctrlKey || ev.metaKey || ev.altKey || ev.target.tagName === "INPUT" ||
+    (ev.key === " " && ev.target.closest && !!ev.target.closest("button,a,[tabindex]"));
   const luego = (f, ms) => timers.push(setTimeout(f, ms));
 
   /* ---------- inicio ---------- */
@@ -236,7 +328,7 @@
   /* ---------- lámina ---------- */
   function vistaLamina(l, sub) {
     const g = grupoDe(l);
-    let h = `<style>${l.css || ""}</style><div class="migas"><a href="#/">← Láminas</a> · ${g.icono} ${g.nombre}</div>
+    let h = `<div class="migas"><a href="#/">← Láminas</a> · ${g.icono} ${g.nombre}</div>
       <h1>Lámina ${l.n} · ${l.titulo} <small>${l.subtitulo}</small></h1><div class="lema">${l.lema}</div>
       <nav class="pestanas"><a href="#/l/${l.n}/imagen">🖼️ Imagen</a>${l.cadena ? `<a href="#/l/${l.n}/cadena">⚙️ ${l.cadena.titulo}</a>` : ""}
       <a href="#/l/${l.n}/preguntas">❓ Preguntas <span class="prog" id="prog-l">${progresoLamina(l)[0]}/${l.preguntas.length} ✓</span></a>${l.escalas && l.escalas.length ? `<a href="#/l/${l.n}/escalas">📏 Escalas (${l.escalas.length})</a>` : ""}${l.tabla ? `<a href="#/l/${l.n}/tabla">📋 Tabla</a>` : ""}
@@ -278,14 +370,19 @@
       <div class="pista-c" id="fichas">${l.preguntas.map(fichaHTML).join("")}</div>
       <button class="cnav next" id="c-next" title="Siguiente (→)">›</button></div>
       <div class="c-pie"><span id="c-pos"></span><div class="puntos" id="puntos"></div><span class="kbd">← → mover · espacio voltear · a–e elegir alternativa · 1 la sé · 2 repasar</span></div>`;
-    if (l.tabla) h += `<h2 id="tabla">📋 Tabla comparativa</h2><div class="tabla-wrap"><table class="tabla"><tr>${l.tabla.cab.map(x => `<th>${x}</th>`).join("")}</tr>
-      ${l.tabla.filas.map(f => `<tr>${f.map(x => `<td>${x}</td>`).join("")}</tr>`).join("")}</table></div>`;
+    // tabla: cada celda lleva el nombre de su columna (data-th) para verse como tarjetas en el celular
+    const thTxt = x => x.replace(/<[^>]+>/g, "").replace(/"/g, "&quot;");
+    if (l.tabla) h += `<h2 id="tabla">📋 Tabla comparativa <small style="font-size:14px;color:var(--tx2);font-weight:500">toca una fila para resaltarla</small></h2>
+      <div class="tabla-wrap"><table class="tabla t2"><thead><tr>${l.tabla.cab.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>
+      ${l.tabla.filas.map((f, i) => `<tr class="f${i % 6}${/^\s*(<[^>]+>)*\s*🔑/.test(f[0]) ? " clave-fila" : ""}">${f.map((x, k) => `<td data-th="${thTxt(l.tabla.cab[k] || "")}">${x}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
     vista.innerHTML = h;
     montarLienzo(l);
     if (l.cadena) montarCadena();
     montarFichas(l);
     enlazar(vista, l);
-    document.onkeydown = ev => { if (ev.target.tagName === "INPUT") return; for (const h of teclas) if (h(ev)) return; };
+    vista.normalize(); siglas(vista); conceptos(vista);
+    $$(".tabla.t2 tbody tr").forEach(tr => tr.onclick = () => { SON.tick(); const on = tr.classList.contains("sel"); $$(".tabla.t2 tr.sel").forEach(x => x.classList.remove("sel")); if (!on) tr.classList.add("sel"); });
+    document.onkeydown = ev => { if (sinAtajo(ev)) return; for (const h of teclas) if (h(ev)) return; };
     $$(".pestanas a[href*='/" + l.n + "/']").forEach(a => a.onclick = ev => {
       const id = a.getAttribute("href").split("/").pop(); const el = document.getElementById(id);
       if (el) { ev.preventDefault(); el.scrollIntoView({ behavior: "smooth" }); history.replaceState(null, "", a.getAttribute("href")); }
@@ -298,7 +395,7 @@
     removeEventListener("scroll", window.__espia || (() => {})); window.__espia = espia; addEventListener("scroll", espia, { passive: true }); espia();
     if (sub) setTimeout(() => {
       if (/^q\d+$/.test(sub)) irPregunta(l, +sub.slice(1));
-      else { const el = document.getElementById(sub); if (el) el.scrollIntoView({ behavior: "smooth" }); }
+      else { const el = document.getElementById(sub); if (el) { el.scrollIntoView({ behavior: "smooth" }); setTimeout(() => el.scrollIntoView(), 900); } }
     }, 350);
   }
 
@@ -352,6 +449,7 @@
       });
       const cap = $("#dcap");
       if (cap) { cap.innerHTML = (d.titulo && l.diapos.length > 1 ? `<b>${k + 1}. ${d.titulo}</b> ` : "") + (d.texto || ""); cap.style.display = cap.innerHTML ? "" : "none"; enlazar(cap, l); }
+      if (cap) { siglas(cap); conceptos(cap); }
       $$("#dtabs button").forEach(b => b.classList.toggle("on", +b.dataset.k === k));
       const dc = $("#dcont"); if (dc) dc.textContent = `${k + 1} / ${l.diapos.length}`;
       const listo = () => requestAnimationFrame(() => requestAnimationFrame(trazar));
@@ -404,7 +502,7 @@
     const box = $("#info");
     box.innerHTML = `<div class="caja info"><h3>${e.t}</h3>${e.s ? `<p>${e.s.replace(/<br>/g, " · ")}</p>` : ""}
       ${num ? `<p><span class="lt">${num.l}</span> ${num.html}</p>` : ""}
-      ${qs.map(q => `<div class="qmini"><a class="ref" data-n="${q.n}">${q.n}</a> <b>${q.pregunta}</b> ${badge(q.veces)}<br><span class="r${q.sin_banco ? " sb" : ""}">${q.r}</span></div>`).join("")}</div>`;
+      ${qs.map(q => `<div class="qmini"><a class="ref" data-n="${q.n}">${q.n}</a> <b>${q.pregunta}</b> ${badge(q.veces)}<br><span class="r${q.sin_banco ? " sb" : ""}">${q.r}</span></div>`).join("")}</div>`; siglas(box); conceptos(box);
     enlazar(box, l); $$(".ref", box).forEach(a => a.onclick = () => irPregunta(l, +a.dataset.n));
     if (innerWidth < 1100 && !auto) box.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
@@ -556,7 +654,7 @@
       let x0 = null, s0 = 0, movio = false;
       cont.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse" || e.target.closest("button,a")) return; x0 = e.clientX; s0 = cont.scrollLeft; movio = false; });
       addEventListener("pointermove", e => { if (x0 === null) return; const dx = e.clientX - x0; if (Math.abs(dx) > 6) { movio = true; cont.classList.add("arrastra"); cont.scrollLeft = s0 - dx; } });
-      addEventListener("pointerup", () => { if (x0 === null) return; x0 = null; if (movio) { cont.classList.remove("arrastra"); detectar(); centrar(actual); } });
+      addEventListener("pointerup", () => { if (x0 === null) return; x0 = null; if (movio) { cont.classList.remove("arrastra"); detectar(); centrar(actual); setTimeout(() => movio = false, 0); } });
       cont.addEventListener("click", e => { if (movio) { e.stopPropagation(); e.preventDefault(); movio = false; } }, true);
       teclas.push(ev => {
         const r = cont.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) return false;
@@ -572,16 +670,18 @@
     }
     if (filtros) filtros.onclick = ev => {
       const b = ev.target.closest("button"); if (!b) return;
-      if (b.dataset.f === "voltear") { const alguna = $$(".ficha:not(.vuelta)", cont).length; $$(".ficha", cont).forEach(f => f.classList.toggle("vuelta", !!alguna)); return; }
+      if (b.dataset.f === "voltear") { const alguna = $$(".ficha:not(.mc):not(.vuelta)", cont).length || $$(".ficha.mc:not(.respondida)", cont).length;
+        $$(".ficha:not(.mc)", cont).forEach(f => f.classList.toggle("vuelta", !!alguna)); $$(".ficha.mc", cont).forEach(f => f.classList.toggle("respondida", !!alguna)); return; }
       $$("#filtros button").forEach(x => x.classList.toggle("on", x === b));
       $$(".ficha", cont).forEach(f => {
         const v = +f.dataset.v, m = marca(f.dataset.id);
         const ver = { todas: 1, fuego: v >= 3, rep: v >= 2, exa: +f.dataset.x > 0, pend: !m, mal: m === "mal" }[b.dataset.f];
         f.style.display = ver ? "" : "none";
       });
-      cuenta(); if (carr) { actual = null; centrar(visibles()[0], false); detectar(); }
+      cuenta(); if (carr) { if (actual) actual.classList.remove("actual"); actual = null; centrar(visibles()[0], false); detectar(); }
     };
     cuenta();
+    return { responder };
   }
 
   /* ---------- repaso global ---------- */
@@ -589,24 +689,26 @@
     const exa = modo === "examen";
     const todas = exa ? unicas().filter(x => (x.q.ex || []).length) : unicas();
     const peso = x => (marca(x.q.id) === "ok" ? 100 : marca(x.q.id) === "mal" ? -10 : 0) - x.q.veces * 10 - (x.q.ex || []).length * 10 + Math.random() * 6;
-    let mazo = todas.slice().sort((a, b) => peso(a) - peso(b)), k = 0;
+    let mazo = todas.slice().sort((a, b) => peso(a) - peso(b)), k = 0, api = null;
     const pinta = () => {
       const x = mazo[k], q = x.q;
       vista.innerHTML = `<div class="repaso"><h1>${exa ? "📝 Simulacro de examen <small>solo preguntas que vinieron en exámenes anteriores, con sus alternativas</small>" : "🔥 Repaso <small>primero las que más salen y las que marcaste para repasar</small>"}</h1>
         <div class="filtros"><span class="cuenta" style="margin-left:0">Pregunta ${k + 1} de ${mazo.length} · Lámina ${x.l.n}: <a href="#/l/${x.l.n}/q${q.n}">${x.l.titulo}</a></span></div>
         <div class="fichas" id="fichas" style="grid-template-columns:1fr">${fichaHTML(q)}</div>
         <div class="nav"><button class="btn sec" id="ant">← Anterior</button><a class="btn sec" href="#/l/${x.l.n}/imagen">🖼️ Ver la lámina</a><button class="btn" id="sig">Siguiente →</button></div>
-        <div class="kbd">Teclado: espacio = voltear · → siguiente · ← anterior · 1 = la sé · 2 = repasar</div></div>`;
-      montarFichas(x.l); enlazar(vista, x.l);
+        <div class="kbd">Teclado: espacio = voltear o ver la respuesta · a–e = elegir alternativa · → siguiente · ← anterior · 1 = la sé · 2 = repasar</div></div>`;
+      ocultar(); api = montarFichas(x.l); enlazar(vista, x.l); vista.normalize(); siglas(vista); conceptos(vista);
       $$(".ref", vista).forEach(a => a.onclick = ev => { ev.preventDefault(); location.hash = `#/l/${x.l.n}/q${a.dataset.n}`; });
       $("#ant").onclick = () => { SON.tick(); k = (k - 1 + mazo.length) % mazo.length; pinta(); };
       $("#sig").onclick = () => { SON.tick(); k = (k + 1) % mazo.length; pinta(); };
     };
     pinta();
     document.onkeydown = ev => {
-      if (ev.target.tagName === "INPUT") return;
+      if (sinAtajo(ev)) return;
       const f = $(".repaso .ficha"); if (!f) return;
-      if (ev.key === " ") { ev.preventDefault(); SON.giro(); f.classList.toggle("vuelta"); }
+      const mc = f.classList.contains("mc");
+      if (ev.key === " ") { ev.preventDefault(); if (mc) api.responder(f, ""); else { SON.giro(); f.classList.toggle("vuelta"); } }
+      else if (mc && /^[a-e]$/i.test(ev.key) && $(`.opw[data-k="${ev.key.toLowerCase()}"]`, f)) { ev.preventDefault(); api.responder(f, ev.key.toLowerCase()); }
       else if (ev.key === "ArrowRight") $("#sig").click(); else if (ev.key === "ArrowLeft") $("#ant").click();
       else if (ev.key === "1" || ev.key === "2") { f.classList.add("vuelta"); const b = $(`.marcar button[data-v="${ev.key === "1" ? "ok" : "mal"}"]`, f); b && b.click(); }
     };

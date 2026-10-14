@@ -167,7 +167,7 @@ b.n{color:var(--ok)} b.a{color:var(--mal)} b.b{color:#1565c0}
 .pista{margin-top:auto;color:var(--tx2);font-size:13px;text-align:center}
 .r{font-size:15px}.r::before{content:"R (banco): ";font-weight:700;color:var(--ok)}
 .r.sb::before{content:"R (tu teoría): ";color:var(--azc)}
-.ok{font-size:14px;color:var(--mal)}.ok::before{content:"⚠️ Según tu teoría: ";font-weight:700}
+div.ok{font-size:14px;color:var(--mal)}div.ok::before{content:"⚠️ Según tu teoría: ";font-weight:700}
 .x{font-size:14.5px}.x::before{content:"💡 "}
 .truco{font-size:14px;color:var(--mo)}.truco::before{content:"🧠 "}
 .marcar{display:flex;gap:8px;margin-top:auto}
@@ -309,7 +309,7 @@ b.n{color:var(--ok)} b.a{color:var(--mal)} b.b{color:#1565c0}
 .etab td{padding:5px 10px;border-top:1px solid var(--borde);vertical-align:top}
 .etab td.pz,.etab th.pz{text-align:center;font-weight:800;white-space:nowrap}
 .etab td.pz{color:var(--az);font-size:15px}
-.etab td.libre{color:var(--tx)}
+.etab td.e-libre{color:var(--tx)}
 .etab:not(.itp) tbody tr:nth-child(odd):not(.sub) td{background:color-mix(in srgb,var(--tx) 3%,var(--papel))}
 .etit{font-weight:800;color:var(--az);font-size:14px;margin:2px 0 -4px}
 .itp tr td{border-top:1px solid rgba(255,255,255,.15);color:#fff;font-weight:600}
@@ -456,3 +456,66 @@ h1{font-weight:700;letter-spacing:0}h2{font-weight:600;font-size:26px}h3{font-we
 .chispa{position:fixed;z-index:120;pointer-events:none;font-size:22px;animation:chispa .9s cubic-bezier(.2,.7,.3,1) forwards}
 @keyframes chispa{from{opacity:1;transform:translate(0,0) scale(.6) rotate(0)}to{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1.2) rotate(var(--rot))}}
 .btn.ex,.bx{background:#7C3AED;color:#fff}
+abbr.sigla{text-decoration:underline dotted;text-underline-offset:3px;cursor:help}.sig-exp{color:var(--tx2);font-size:.92em}
+
+/* ---------- tablas comparativas ---------- */
+.tabla.t2{border-collapse:separate;border-spacing:0;overflow:hidden}
+.tabla.t2 thead th{position:sticky;top:0;z-index:1;font-size:15px;padding:12px 14px;letter-spacing:.2px}
+.tabla.t2 td{padding:11px 14px;line-height:1.45;border-bottom:1px solid var(--borde)}
+.tabla.t2 tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--borde) 22%,var(--papel))}
+.tabla.t2 td:first-child{font-family:var(--f-tit);font-weight:600;font-size:15.5px;border-left:6px solid var(--c,#3B82F6);
+  background:color-mix(in srgb,var(--c,#3B82F6) 10%,var(--papel))!important;white-space:nowrap}
+.tabla.t2 tr.f0{--c:#3B82F6}.tabla.t2 tr.f1{--c:#EF4444}.tabla.t2 tr.f2{--c:#22C55E}.tabla.t2 tr.f3{--c:#F59E0B}.tabla.t2 tr.f4{--c:#7C3AED}.tabla.t2 tr.f5{--c:#14B8A6}
+.tabla.t2 tbody tr{cursor:pointer;transition:transform .12s}
+.tabla.t2 tbody tr:hover td{background:color-mix(in srgb,var(--c) 9%,var(--papel))}
+.tabla.t2 tbody tr.sel td{background:var(--resalte)!important;color:var(--tx)}
+.tabla.t2 tbody tr.sel td:first-child{border-left-width:10px}
+.tabla.t2 tbody tr:last-child td{border-bottom:0}
+@media (max-width:820px){
+  .tabla.t2,.tabla.t2 tbody,.tabla.t2 tr,.tabla.t2 td{display:block;width:100%}
+  .tabla.t2{border:0;background:none;box-shadow:none}
+  .tabla.t2 thead{display:none}
+  .tabla.t2 tbody tr{background:var(--papel);border:2px solid var(--borde);border-left:8px solid var(--c);border-radius:var(--r-md);margin-bottom:12px;overflow:hidden;box-shadow:var(--sombra-juego)}
+  .tabla.t2 td{border:0;padding:6px 14px;background:none!important}
+  .tabla.t2 td:first-child{border:0;font-size:17px;padding-top:12px;white-space:normal}
+  .tabla.t2 td:not(:first-child)::before{content:attr(data-th);display:block;font-size:12px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px}
+}
+
+/* ---------- conceptos tipo Wikipedia ---------- */
+.con{border-bottom:2px dotted var(--azc);cursor:help;transition:background .15s;border-radius:3px}
+.con:hover,.con:focus{background:color-mix(in srgb,var(--azc) 14%,transparent);outline:none}
+.paso .con{border-bottom-color:rgba(255,255,255,.75)}
+#pop{position:fixed;z-index:130;max-width:340px;background:var(--papel);color:var(--tx);border:2px solid var(--borde);border-radius:var(--r-md);
+  box-shadow:var(--sombra-md),0 6px 0 var(--borde);padding:12px 16px;font-size:14.5px;line-height:1.5;opacity:0;pointer-events:none;
+  transform:translateY(4px);transition:opacity .15s,transform .15s}
+#pop.ver{opacity:1;pointer-events:auto;transform:none}
+#pop p{margin:6px 0 0}
+#pop .ph{display:flex;align-items:center;gap:8px;font-family:var(--f-tit);font-size:16.5px;color:var(--az);border-bottom:2px solid var(--borde);padding-bottom:6px}
+#pop .ph b{font-weight:600}
+#pop .pt-tipo{font-size:11px;text-transform:uppercase;letter-spacing:.5px;background:var(--borde);color:var(--tx2);border-radius:999px;padding:1px 8px}
+#pop .pcerrar{margin-left:auto;border:0;background:none;color:var(--tx2);font-size:15px;display:none}
+#pop.fijo .pcerrar,#pop.hoja .pcerrar{display:block}
+#pop .pclave{background:var(--resalte);border-radius:var(--r-sm);padding:6px 10px}
+#pop .pej{color:var(--tx2)}#pop .plit{font-size:12px;color:var(--tx2)}
+#pop.hoja{left:0!important;right:0;bottom:0;top:auto!important;max-width:none;border-radius:var(--r-lg) var(--r-lg) 0 0;padding:16px 20px 26px;transform:translateY(100%)}
+#pop.hoja.ver{transform:none}
+.tabla.t2 tr.clave-fila td{background:var(--resalte)!important;font-weight:600;border-top:3px solid var(--am)}
+.tabla.t2 tr.clave-fila td:first-child{--c:#FACC15;white-space:normal}
+
+/* ---------- arreglos de la revisión ---------- */
+:root{--alto-barra:62px}
+@media (max-width:820px){:root{--alto-barra:58px}}
+.pestanas{top:var(--alto-barra)}
+section[id],h2[id]{scroll-margin-top:130px}
+html,body{overflow-x:clip}
+.paso .con{border-bottom-color:var(--azc)}.paso .m .con{border-bottom-color:rgba(255,255,255,.75)}
+.tabla.t2{overflow:visible}.tabla.t2 thead th:first-child{border-top-left-radius:var(--r-md)}.tabla.t2 thead th:last-child{border-top-right-radius:var(--r-md)}
+.b2{color:#1F2937}
+/* contraste en modo oscuro: texto oscuro sobre los azules claros */
+:root[data-theme="dark"] :is(.barra nav a.act,.controles .btn.on,.dtabs button.on,.etab thead th,#toast:not(.bien):not(.casi),.filtros button.on,.pestanas a.act,.ref,.tarj .mini span){color:#0F172A}
+:root[data-theme="dark"] b.b{color:#93C5FD}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) :is(.barra nav a.act,.controles .btn.on,.dtabs button.on,.etab thead th,#toast:not(.bien):not(.casi),.filtros button.on,.pestanas a.act,.ref,.tarj .mini span){color:#0F172A}
+  :root:not([data-theme="light"]) b.b{color:#93C5FD}}
+/* modo día: azul de acción con más contraste */
+:root:not([data-theme="dark"]) :is(.filtros button.on,.pestanas a.act,.ref,.tarj .mini span){background-color:#2563EB;border-color:#2563EB}

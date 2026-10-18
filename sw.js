@@ -1,12 +1,13 @@
 /* Atlas sin internet: guarda todo el atlas la primera vez y lo sirve desde el teléfono, la tablet o la PC.
    web.py rellena la versión y la lista de archivos en cada compilación; una versión nueva reemplaza la caché vieja. */
-const CACHE = "atlas-202610180156";
+// varias apps comparten canazachyub.github.io: el nombre lleva la carpeta para no tocar las cachés de otra
+const BASE = "atlas " + self.registration.scope + " ", CACHE = BASE + "202610180159";
 const ARCHIVOS = [
  "./",
- "fonts.css?v=202610180156",
- "app.css?v=202610180156",
- "datos.js?v=202610180156",
- "app.js?v=202610180156",
+ "fonts.css?v=202610180159",
+ "app.css?v=202610180159",
+ "datos.js?v=202610180159",
+ "app.js?v=202610180159",
  "manifest.webmanifest",
  "icono-192.png",
  "icono-512.png",
@@ -82,7 +83,7 @@ self.addEventListener("install", ev => {
 
 self.addEventListener("activate", ev => {
   ev.waitUntil(caches.keys()
-    .then(ks => Promise.all(ks.filter(k => k.startsWith("atlas-") && k !== CACHE).map(k => caches.delete(k))))
+    .then(ks => Promise.all(ks.filter(k => (k.startsWith(BASE) || k.startsWith("atlas-2")) && k !== CACHE).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

@@ -519,3 +519,16 @@ html,body{overflow-x:clip}
   :root:not([data-theme="light"]) b.b{color:#93C5FD}}
 /* modo día: azul de acción con más contraste */
 :root:not([data-theme="dark"]) :is(.filtros button.on,.pestanas a.act,.ref,.tarj .mini span){background-color:#2563EB;border-color:#2563EB}
+
+/* ---------- exámenes resueltos ---------- */
+.grid-exr{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:10px}
+.tarj.exr .cuerpo{padding:16px 18px}
+.tarj.exr b{font-family:var(--f-tit);font-size:17px}
+.exr-cab{background:var(--papel);border:2px solid var(--borde);border-radius:var(--r-lg);padding:16px 20px;margin:8px 0 14px}
+.exr-cab h1{margin:0 0 6px;font-size:24px}
+.exr-cab p{margin:0 0 10px;color:var(--tx2)}
+.exr-marcador{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+#exr-pts{font-size:16px}
+.fichas.exr-lista{grid-template-columns:1fr;max-width:860px}
+.ver-lam{display:inline-block;margin-left:6px;font-size:13px;white-space:nowrap}
+.fichas.exr-lista .ficha{max-width:none;width:auto;min-height:0}

@@ -274,6 +274,7 @@
     detenerTodo();
     if (h[0] === "l" && porN[+h[1]]) vistaLamina(porN[+h[1]], h[2]);
     else if (h[0] === "repaso") vistaRepaso(h[1]);
+    else if (h[0] === "examen" && (A.resueltos || []).some(x => x.id === h[1])) vistaResuelto(A.resueltos.find(x => x.id === h[1]));
     else vistaInicio();
     if (h[0] !== "l" || !h[2]) window.scrollTo(0, 0);
   }
@@ -304,6 +305,16 @@
       <div class="stat"><b>${ok}</b><span>ya dominas</span><div class="barra-prog"><i style="width:${(ok / todas.length * 100).toFixed(1)}%"></i></div></div></div></section>
       <input class="buscar" id="buscar" placeholder="🔎 Busca en las ${todas.length} preguntas (p. ej. ${A.ejemplos || "«Damoiseau», «galope», «facies»"})…" autocomplete="off">
       <div class="resultados" id="resultados"></div>`;
+    if ((A.resueltos || []).length) {
+      h += `<h2>📝 Exámenes resueltos</h2><div class="grid-exr">`;
+      for (const x of A.resueltos) {
+        const ok = x.preguntas.filter(q => marca(q.id) === "ok").length;
+        h += `<a class="tarj exr" href="#/examen/${x.id}"><div class="cuerpo"><b>${x.icono} ${x.titulo}</b>
+          <div class="meta"><span>❓ ${x.preguntas.length} preguntas</span><span>✓ ${ok}</span></div>
+          <div class="barra-prog"><i style="width:${(ok / x.preguntas.length * 100).toFixed(0)}%"></i></div></div></a>`;
+      }
+      h += "</div>";
+    }
     for (const g of A.grupos) {
       const ls = A.laminas.filter(l => l.grupo === g.id); if (!ls.length) continue;
       h += `<h2>${g.icono} ${g.nombre}</h2><div class="grid-lam">`;
@@ -712,6 +723,26 @@
       else if (ev.key === "ArrowRight") $("#sig").click(); else if (ev.key === "ArrowLeft") $("#ant").click();
       else if (ev.key === "1" || ev.key === "2") { f.classList.add("vuelta"); const b = $(`.marcar button[data-v="${ev.key === "1" ? "ok" : "mal"}"]`, f); b && b.click(); }
     };
+  }
+
+  /* ---------- exámenes resueltos: todas las preguntas en lista, con puntaje ---------- */
+  function vistaResuelto(x) {
+    const n = x.preguntas.length;
+    vista.innerHTML = `<div class="migas"><a href="#/">← Láminas</a> · Exámenes resueltos</div>
+      <section class="exr-cab"><h1>${x.icono} ${x.titulo}</h1><p>${x.nota}</p>
+      <div class="exr-marcador"><span id="exr-pts">0 de ${n} respondidas</span><button class="btn sec" id="exr-reset">↺ Empezar de nuevo</button></div></section>
+      <div class="filtros" id="filtros"><button class="on" data-f="todas">Todas</button><button data-f="pend">Sin marcar</button><button data-f="mal">✗ Para repasar</button><button data-f="voltear">👁️ Ver todas las respuestas</button><span class="cuenta" id="cuenta"></span></div>
+      <div class="fichas exr-lista" id="fichas">${x.preguntas.map(fichaHTML).join("")}</div>`;
+    const api = montarFichas(x), cont = $("#fichas");
+    const puntaje = () => {
+      const rs = $$(".ficha.respondida", cont), bien = $$(".opw.elegida.bien", cont).length, eleg = $$(".opw.elegida", cont).length;
+      $("#exr-pts").innerHTML = eleg ? `<b>${bien}</b> correctas de ${eleg} respondidas · ${n - rs.length} por responder${rs.length === n ? ` · nota <b>${Math.round(bien / n * 20)}</b>/20` : ""}` : `0 de ${n} respondidas`;
+      if (rs.length === n && eleg === n && !puntaje.fin) { puntaje.fin = true; SON.fanfarria(); toast(`🎉 Terminaste: ${bien} de ${n}`, "bien"); }
+    };
+    cont.addEventListener("click", () => setTimeout(puntaje, 0));
+    $("#exr-reset").onclick = () => { $$(".ficha", cont).forEach(f => { f.classList.remove("respondida"); $$(".opw", f).forEach(w => w.classList.remove("elegida", "bien", "malo")); }); puntaje.fin = false; puntaje(); SON.click(); window.scrollTo(0, 0); };
+    vista.normalize(); siglas(vista); conceptos(vista);
+    document.onkeydown = null; void api;
   }
 
   ruta();

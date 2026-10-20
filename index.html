@@ -11,8 +11,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Atlas Semio">
-<link rel="stylesheet" href="fonts.css?v=20261020090104">
-<link rel="stylesheet" href="app.css?v=20261020090104">
+<link rel="stylesheet" href="fonts.css?v=20261020090441">
+<link rel="stylesheet" href="app.css?v=20261020090441">
 </head>
 <body>
 <header class="barra">
@@ -25,19 +25,17 @@
 </header>
 <main id="vista"></main>
 <div id="toast" role="status"></div>
-<script src="datos.js?v=20261020090104"></script>
-<script src="app.js?v=20261020090104"></script>
+<script src="datos.js?v=20261020090441"></script>
+<script src="app.js?v=20261020090441"></script>
 <script>
 // sin internet: el service worker guarda el atlas completo la primera vez que se abre con conexión
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   addEventListener("load", () => {
-    const nuevo = !navigator.serviceWorker.controller;
-    navigator.serviceWorker.register("sw.js").then(reg => {
-      if (!nuevo) return;
-      const w = reg.installing || reg.waiting;
-      const listo = () => { const t = document.getElementById("toast"); t.textContent = "📥 Atlas guardado: ya funciona sin internet"; t.className = "bien ver"; setTimeout(() => t.classList.remove("ver"), 3500); };
-      if (w) w.addEventListener("statechange", () => { if (w.state === "activated") listo(); });
-    }).catch(() => {});
+    const aviso = () => { const t = document.getElementById("toast"); t.textContent = "📥 Atlas guardado completo: ya funciona sin internet"; t.className = "bien ver"; setTimeout(() => t.classList.remove("ver"), 3500); };
+    navigator.serviceWorker.addEventListener("message", ev => { if (ev.data === "atlas-completo") aviso(); });
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+    // las láminas grandes se guardan después de que la página ya se ve (y se completan si faltara alguna)
+    navigator.serviceWorker.ready.then(reg => setTimeout(() => reg.active && reg.active.postMessage("guardar-resto"), 1500));
   });
 }
 </script>

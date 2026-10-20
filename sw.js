@@ -1,13 +1,13 @@
 /* Atlas sin internet: guarda todo el atlas la primera vez y lo sirve desde el teléfono, la tablet o la PC.
    web.py rellena la versión y la lista de archivos en cada compilación; una versión nueva reemplaza la caché vieja. */
 // varias apps comparten canazachyub.github.io: el nombre lleva la carpeta para no tocar las cachés de otra
-const BASE = "atlas " + self.registration.scope + " ", CACHE = BASE + "20261020090104";
-const ARCHIVOS = [
+const BASE = "atlas " + self.registration.scope + " ", CACHE = BASE + "20261020090441";
+const NUCLEO = [
  "./",
- "fonts.css?v=20261020090104",
- "app.css?v=20261020090104",
- "datos.js?v=20261020090104",
- "app.js?v=20261020090104",
+ "fonts.css?v=20261020090441",
+ "app.css?v=20261020090441",
+ "datos.js?v=20261020090441",
+ "app.js?v=20261020090441",
  "manifest.webmanifest",
  "icono-192.png",
  "icono-512.png",
@@ -15,6 +15,28 @@ const ARCHIVOS = [
  "fonts/fredoka-latin.woff2",
  "fonts/nunito-latin-ext.woff2",
  "fonts/nunito-latin.woff2",
+ "img/mini/01.webp",
+ "img/mini/02.webp",
+ "img/mini/03.webp",
+ "img/mini/04.webp",
+ "img/mini/05.webp",
+ "img/mini/06.webp",
+ "img/mini/07.webp",
+ "img/mini/08.webp",
+ "img/mini/09.webp",
+ "img/mini/10.webp",
+ "img/mini/11.webp",
+ "img/mini/12.webp",
+ "img/mini/13.webp",
+ "img/mini/14.webp",
+ "img/mini/15.webp",
+ "img/mini/16.webp",
+ "img/mini/17.webp",
+ "img/mini/18.webp",
+ "img/mini/19.webp",
+ "img/mini/20.webp"
+];   // se guarda al instalar: la página abre rápido desde la primera visita
+const RESTO = [
  "img/01.webp",
  "img/01_2.webp",
  "img/01_3.webp",
@@ -75,10 +97,22 @@ const ARCHIVOS = [
  "img/20.webp",
  "img/20_2.webp",
  "img/20_3.webp"
-];
+];     // láminas grandes: se guardan después, sin competir con lo que estás viendo
 
 self.addEventListener("install", ev => {
-  ev.waitUntil(caches.open(CACHE).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  ev.waitUntil(caches.open(CACHE).then(c => c.addAll(NUCLEO)).then(() => self.skipWaiting()));
+});
+
+// la página pide guardar el resto cuando terminó de cargar; se bajan de a 3 y solo las que faltan
+self.addEventListener("message", ev => {
+  if (ev.data !== "guardar-resto") return;
+  ev.waitUntil((async () => {
+    const c = await caches.open(CACHE), falta = [];
+    for (const u of RESTO) if (!(await c.match(u))) falta.push(u);
+    for (let i = 0; i < falta.length; i += 3) await Promise.all(falta.slice(i, i + 3).map(u => c.add(u).catch(() => {})));
+    let ok = 0; for (const u of RESTO) if (await c.match(u)) ok++;
+    if (falta.length && ok === RESTO.length) (await self.clients.matchAll()).forEach(cl => cl.postMessage("atlas-completo"));
+  })());
 });
 
 self.addEventListener("activate", ev => {

@@ -320,7 +320,7 @@
       h += `<h2>${g.icono} ${g.nombre}</h2><div class="grid-lam">`;
       for (const l of ls) {
         const [o, t] = progresoLamina(l), f3 = l.preguntas.filter(q => q.veces >= 3).length, fx = l.preguntas.filter(q => (q.ex || []).length).length;
-        h += `<a class="tarj" href="#/l/${l.n}"><div class="mini" style="background-image:url('${l.img}')"><span>Lámina ${l.n}</span></div>
+        h += `<a class="tarj" href="#/l/${l.n}"><div class="mini" style="background-image:url('${l.mini || l.img}')"><span>Lámina ${l.n}</span></div>
           <div class="cuerpo"><b>${l.titulo}</b><div class="meta"><span>❓ ${t} preguntas</span>${f3 ? `<span>🔥 ${f3}</span>` : ""}${fx ? `<span>📝 ${fx}</span>` : ""}<span>✓ ${o}</span></div>
           <div class="barra-prog"><i style="width:${(o / t * 100).toFixed(0)}%"></i></div></div></a>`;
       }

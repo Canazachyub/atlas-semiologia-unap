@@ -727,7 +727,7 @@
 
   /* ---------- exámenes resueltos: todas las preguntas en lista, con puntaje ---------- */
   function vistaResuelto(x) {
-    const n = x.preguntas.length;
+    const n = x.preguntas.filter(q => q.opciones.length && q.letra).length;   // las abiertas no suman puntaje
     vista.innerHTML = `<div class="migas"><a href="#/">← Láminas</a> · Exámenes resueltos</div>
       <section class="exr-cab"><h1>${x.icono} ${x.titulo}</h1><p>${x.nota}</p>
       <div class="exr-marcador"><span id="exr-pts">0 de ${n} respondidas</span><button class="btn sec" id="exr-reset">↺ Empezar de nuevo</button></div></section>
@@ -735,7 +735,7 @@
       <div class="fichas exr-lista" id="fichas">${x.preguntas.map(fichaHTML).join("")}</div>`;
     const api = montarFichas(x), cont = $("#fichas");
     const puntaje = () => {
-      const rs = $$(".ficha.respondida", cont), bien = $$(".opw.elegida.bien", cont).length, eleg = $$(".opw.elegida", cont).length;
+      const rs = $$(".ficha.mc.respondida", cont), bien = $$(".opw.elegida.bien", cont).length, eleg = $$(".opw.elegida", cont).length;
       $("#exr-pts").innerHTML = eleg ? `<b>${bien}</b> correctas de ${eleg} respondidas · ${n - rs.length} por responder${rs.length === n ? ` · nota <b>${Math.round(bien / n * 20)}</b>/20` : ""}` : `0 de ${n} respondidas`;
       if (rs.length === n && eleg === n && !puntaje.fin) { puntaje.fin = true; SON.fanfarria(); toast(`🎉 Terminaste: ${bien} de ${n}`, "bien"); }
     };

@@ -1,13 +1,13 @@
 /* Atlas sin internet: guarda todo el atlas la primera vez y lo sirve desde el teléfono, la tablet o la PC.
    web.py rellena la versión y la lista de archivos en cada compilación; una versión nueva reemplaza la caché vieja. */
 // varias apps comparten canazachyub.github.io: el nombre lleva la carpeta para no tocar las cachés de otra
-const BASE = "atlas " + self.registration.scope + " ", CACHE = BASE + "20261023003104";
+const BASE = "atlas " + self.registration.scope + " ", CACHE = BASE + "20261027080428";
 const NUCLEO = [
  "./",
- "fonts.css?v=20261023003104",
- "app.css?v=20261023003104",
- "datos.js?v=20261023003104",
- "app.js?v=20261023003104",
+ "fonts.css?v=20261027080428",
+ "app.css?v=20261027080428",
+ "datos.js?v=20261027080428",
+ "app.js?v=20261027080428",
  "manifest.webmanifest",
  "icono-192.png",
  "icono-512.png",
@@ -188,7 +188,18 @@ const RESTO = [
  "img/42_3.webp",
  "img/43.webp",
  "img/43_2.webp",
- "img/43_3.webp"
+ "img/43_3.webp",
+ "modulos/ecg/app.js",
+ "modulos/ecg/index.html",
+ "modulos/ecg/motor.js",
+ "modulos/ecg/secciones.js",
+ "modulos/ecg/img/corazon.webp",
+ "modulos/ecg/img/corte.webp",
+ "modulos/ecg/img/dipolo.webp",
+ "modulos/ecg/img/infarto.webp",
+ "modulos/ecg/img/membrana.webp",
+ "modulos/ecg/img/precordial.webp",
+ "modulos/ecg/img/torso.webp"
 ];     // láminas grandes: se guardan después, sin competir con lo que estás viendo
 
 self.addEventListener("install", ev => {
@@ -218,8 +229,10 @@ self.addEventListener("fetch", ev => {
   if (r.method !== "GET" || new URL(r.url).origin !== location.origin) return;
   // la página: primero la red (para recibir versiones nuevas), y sin internet la guardada
   if (r.mode === "navigate") {
-    ev.respondWith(fetch(r).then(res => { const c = res.clone(); caches.open(CACHE).then(k => k.put("./", c)); return res; })
-      .catch(() => caches.match("./").then(x => x || caches.match("index.html"))));
+    // cada página se guarda con su propia dirección (el atlas y los módulos interactivos)
+    ev.respondWith(fetch(r).then(res => { const c = res.clone(); if (res.ok) caches.open(CACHE).then(k => k.put(r.url.split("#")[0].split("?")[0], c)); return res; })
+      .catch(() => caches.match(r.url.split("#")[0].split("?")[0], { ignoreSearch: true })
+        .then(x => x || caches.match(r.url.split("#")[0].split("?")[0] + "index.html")).then(x => x || caches.match("./"))));
     return;
   }
   // lo demás: lo guardado, y si falta, la red (y se guarda para la próxima)

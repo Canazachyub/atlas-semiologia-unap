@@ -315,6 +315,13 @@
       }
       h += "</div>";
     }
+    if ((A.modulos || []).length) {   // módulos interactivos (simuladores) del curso
+      h += `<h2>🧪 Módulos interactivos</h2><div class="grid-lam">`;
+      for (const m of A.modulos)
+        h += `<a class="tarj" href="${m.href}"><div class="mini" style="background-image:url('${m.mini}')"><span>${m.icono} Simulador</span></div>
+          <div class="cuerpo"><b>${m.icono} ${m.titulo}</b><div class="meta" style="display:block">${m.descripcion}</div></div></a>`;
+      h += "</div>";
+    }
     for (const g of A.grupos) {
       const ls = A.laminas.filter(l => l.grupo === g.id); if (!ls.length) continue;
       h += `<h2>${g.icono} ${g.nombre}</h2><div class="grid-lam">`;
@@ -342,7 +349,7 @@
     let h = `<div class="migas"><a href="#/">← Láminas</a> · ${g.icono} ${g.nombre}</div>
       <h1>Lámina ${l.n} · ${l.titulo} <small>${l.subtitulo}</small></h1><div class="lema">${l.lema}</div>
       <nav class="pestanas"><a href="#/l/${l.n}/imagen">🖼️ Imagen</a>${l.cadena ? `<a href="#/l/${l.n}/cadena">⚙️ ${l.cadena.titulo}</a>` : ""}
-      <a href="#/l/${l.n}/preguntas">❓ Preguntas <span class="prog" id="prog-l">${progresoLamina(l)[0]}/${l.preguntas.length} ✓</span></a>${l.escalas && l.escalas.length ? `<a href="#/l/${l.n}/escalas">📏 Escalas (${l.escalas.length})</a>` : ""}${l.tabla ? `<a href="#/l/${l.n}/tabla">📋 Tabla</a>` : ""}
+      <a href="#/l/${l.n}/preguntas">❓ Preguntas <span class="prog" id="prog-l">${progresoLamina(l)[0]}/${l.preguntas.length} ✓</span></a>${l.escalas && l.escalas.length ? `<a href="#/l/${l.n}/escalas">📏 Escalas (${l.escalas.length})</a>` : ""}${l.tabla ? `<a href="#/l/${l.n}/tabla">📋 Tabla</a>` : ""}${(A.modulos || []).filter(m => (m.laminas || []).includes(l.n)).map(m => `<a href="${m.href}">${m.enlace}</a>`).join("")}
       ${l.n > 1 && porN[l.n - 1] ? `<a class="nav-l" href="#/l/${l.n - 1}" title="${porN[l.n - 1].titulo}">← ${l.n - 1}</a>` : ""}${porN[l.n + 1] ? `<a class="nav-l" href="#/l/${l.n + 1}" title="${porN[l.n + 1].titulo}">${l.n + 1} →</a>` : ""}</nav>
       <section id="imagen" class="zona"><div><div class="marco">
         <div class="controles"><button class="btn chico" id="b-tour">▶ Recorrer</button><button class="btn chico sec" id="b-quiz">🎯 ¿Dónde está?</button>

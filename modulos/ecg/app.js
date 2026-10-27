@@ -214,7 +214,14 @@
     main.innerHTML = `<h1>Simulador: el corazón y su electrocardiograma</h1>
       <p class="lema">Mira cómo el impulso nace en el nódulo sinusal y recorre el corazón mientras el trazado se dibuja en el papel a <b>25 mm/s</b>. Elige un ritmo o una patología, cámbiale la velocidad y mira dónde se frena o se corta el impulso.</p>
       <div class="grid2"><div><div id="corazon"></div>
-        <div class="letrero" id="letrero"><span class="k" id="onda-k">—</span><span id="onda-n">…</span></div>
+        <div class="letrero" id="letrero"><span class="k" id="onda-k">—</span><span><span id="onda-n">…</span><span class="nota" id="onda-d" style="display:block;font-weight:500"></span></span></div>
+        <div class="caja" style="padding:10px 12px"><div class="ctrl" style="margin:0">
+          <button class="btn sec" id="atras" title="Etapa anterior (←)">⏮ Etapa anterior</button>
+          <button class="btn" id="pausa" title="Pausa / seguir (barra espaciadora)">⏸ Pausa</button>
+          <button class="btn sec" id="adelante" title="Etapa siguiente (→)">Etapa siguiente ⏭</button>
+          <button class="btn sec" id="fino" title="Avanzar 0.02 s (Shift + →)">+0.02 s</button></div>
+          <div class="ctrl" style="margin:6px 0 0"><label>Velocidad <input type="range" id="vel-r" min="0" max="100" step="1"> <b id="vel-v"></b></label>
+          <span class="nota">Atajos: <span class="kbd">espacio</span> pausa · <span class="kbd">→</span> <span class="kbd">←</span> etapa · <span class="kbd">Shift</span>+<span class="kbd">→</span> avance fino</span></div></div>
         <div class="caja" style="padding:10px"><canvas class="ecg" id="monitor"></canvas>
         <div class="ctrl" style="justify-content:space-between;margin-bottom:0"><span class="nota">Cuadradito: <b>0.04 s</b> × <b>1 mm</b> (0.1 mV) · cuadrado grande: <b>0.20 s</b> × <b>5 mm</b></span>
           <a class="btn sec" href="#patologia" id="ver12">📄 Ver las 12 derivaciones</a></div></div></div>
@@ -222,10 +229,10 @@
         ${Object.entries(grupos).map(([g, ls]) => `<div class="nota">${g}</div><div class="chips">${ls.map(([k, p]) => `<button class="chip" data-tipo="${k}">${p.nombre.replace(/ \(.*\)$/, "")}</button>`).join("")}</div>`).join("")}
         <div id="iam-opc" style="display:none"><div class="ctrl"><label>Región <select id="iam-reg">${Object.entries(E.REGIONES).map(([k, r]) => `<option value="${k}">${r.nombre}</option>`).join("")}</select></label>
           <label>Fase <select id="iam-fase">${Object.entries(E.FASES).map(([k, f]) => `<option value="${k}">${f.split(":")[0]}</option>`).join("")}</select></label></div></div>
-        <div class="ctrl"><label>Velocidad <span class="chips" id="vel">${[[0.1, "🐢 ×0.1"], [0.25, "×0.25"], [0.5, "×0.5"], [1, "×1 real"]].map(([v, n]) => `<button class="chip" data-v="${v}">${n}</button>`).join("")}</span></label></div>
+        <div class="ctrl"><span class="chips" id="vel">${[[0.05, "🐢 ×0.05"], [0.1, "×0.1"], [0.25, "×0.25"], [0.5, "×0.5"], [1, "×1 real"]].map(([v, n]) => `<button class="chip" data-v="${v}">${n}</button>`).join("")}</span></div>
         <div class="ctrl"><label id="fc-l">FC <input type="range" id="fc" min="30" max="180" step="1"> <b id="fc-v"></b> lpm</label>
           <label>Derivación <select id="der">${E.LISTA12.map(d => `<option>${d}</option>`).join("")}</select></label>
-          <button class="btn sec" id="pausa">⏸ Pausa</button></div>
+</div>
       </div>
       <div class="caja info" id="explica"></div></div></div>`;
     const st = { tipo: "normal", fc: 75, vel: 0.25, der: "DII", region: "anteroseptal", fase: "les_epi", pausa: false };
@@ -236,10 +243,10 @@
     const ventana = () => P.W / P.mm / 25;  // segundos que caben en el monitor
     function armar() {
       const cfg = { tipo: st.tipo, fc: st.fc, region: st.region, fase: st.fase, semilla: 1 + Math.floor(Math.random() * 1e6) };
-      ecg = E.construir(cfg, 600); tEcg = 0;
+      ecg = E.construir(cfg, 600); tEcg = 0; T = 0; BORDES = etapas();
       try { sessionStorage.setItem("ecg-sim", JSON.stringify(st)); } catch (e) {}
       $$("[data-tipo]").forEach(b => b.classList.toggle("act", b.dataset.tipo === st.tipo));
-      $$("#vel [data-v]").forEach(b => b.classList.toggle("act", +b.dataset.v === st.vel));
+      pintaVel();
       $("#iam-opc").style.display = st.tipo === "iam" ? "" : "none";
       const pat = E.PATRONES[st.tipo], fcLibre = ["normal", "taqui", "bradi", "fa", "bav3"].includes(st.tipo);
       $("#fc-l").style.opacity = fcLibre ? 1 : .45; $("#fc").disabled = !fcLibre; $("#fc").value = st.fc; $("#fc-v").textContent = st.fc;
@@ -250,43 +257,94 @@
       $("#explica").innerHTML = `<h3 style="margin-top:0">${pat.nombre}</h3><p>${tx.que || ""}</p>${extra}<ul>${(tx.ecg || []).map(x => `<li>${x}</li>`).join("")}</ul>${tx.causa ? `<p class="nota">${tx.causa}</p>` : ""}`;
       $("#ver12").href = "#patologia/" + st.tipo;
     }
-    function inicio() { P = new Papel(cv, 34); P.grilla(); xPrev = 0; T = 0; }
+    function inicio() { P = new Papel(cv, 34); P.grilla(); xPrev = 0; T = tEcg; }
+    // velocidad en escala logarítmica: 0 → ×0.02 · 100 → ×1
+    const aVel = r => +(0.02 * Math.pow(50, r / 100)).toFixed(3), deVel = v => Math.round(100 * Math.log(v / 0.02) / Math.log(50));
+    function pintaVel() {
+      $("#vel-r").value = deVel(st.vel); $("#vel-v").textContent = "×" + st.vel.toFixed(st.vel < 0.1 ? 3 : 2).replace(/0+$/, "").replace(/\.$/, "");
+      $$("#vel [data-v]").forEach(b => b.classList.toggle("act", Math.abs(+b.dataset.v - st.vel) < 1e-3));
+    }
+    function pintaPausa() { $("#pausa").textContent = st.pausa ? "▶ Seguir" : "⏸ Pausa"; }
     $$("[data-tipo]").forEach(b => b.onclick = () => { st.tipo = b.dataset.tipo; st.fc = E.PATRONES[st.tipo].fc; armar(); inicio(); });
-    $$("#vel [data-v]").forEach(b => b.onclick = () => { st.vel = +b.dataset.v; armar(); });
+    const guarda = () => { try { sessionStorage.setItem("ecg-sim", JSON.stringify(st)); } catch (e) {} };
+    $$("#vel [data-v]").forEach(b => b.onclick = () => { st.vel = +b.dataset.v; pintaVel(); guarda(); });
+    $("#vel-r").oninput = ev => { st.vel = aVel(+ev.target.value); pintaVel(); guarda(); };
     $("#fc").oninput = ev => { st.fc = +ev.target.value; $("#fc-v").textContent = st.fc; };
     $("#fc").onchange = () => { armar(); inicio(); };
     $("#der").onchange = ev => { st.der = ev.target.value; armar(); inicio(); };
     $("#iam-reg").onchange = ev => { st.region = ev.target.value; armar(); inicio(); };
     $("#iam-fase").onchange = ev => { st.fase = ev.target.value; armar(); inicio(); };
-    $("#pausa").onclick = () => { st.pausa = !st.pausa; $("#pausa").textContent = st.pausa ? "▶ Seguir" : "⏸ Pausa"; };
-    armar(); inicio();
+    $("#pausa").onclick = () => { st.pausa = !st.pausa; pintaPausa(); };
+    /* --- paso a paso: las etapas del ciclo son los bordes de cada onda --- */
+    function etapas() {
+      const b = [];
+      for (const l of ecg.latidos) {
+        const m = l._m || (l._m = E.morfo(ecg.cfg, l)), qt = Math.min(0.46, Math.max(0.3, 0.4 * Math.sqrt(l.rr || 0.8)));
+        if (l.tp != null && ecg.cfg.tipo !== "fa") b.push(l.tp, l.tp + 0.105);
+        if (l.tq != null) b.push(l.tq, l.tq + m.qrsDur, l.tq + qt - 0.17, l.tq + qt + 0.02);
+      }
+      return b.sort((x, y) => x - y);
+    }
+    let BORDES = [];
+    const vecino = dir => {
+      const t = tEcg; if (dir > 0) return BORDES.find(x => x > t + 0.004) ?? t + 0.2;
+      for (let i = BORDES.length - 1; i >= 0; i--) if (BORDES[i] < t - 0.004) return BORDES[i];
+      return 0;
+    };
+    function irA(t) {   // salto hacia atrás: se redibuja la página del monitor hasta t
+      tEcg = Math.max(0, t); T = tEcg; const W = ventana(), ini = tEcg - (tEcg % W);
+      P.grilla(); xPrev = 0; dibujar(ini, tEcg, true);
+    }
+    function avanzaA(t) { if (t - tEcg > ventana() * 0.9) return irA(t); const a = tEcg; tEcg = t; T += t - a; dibujar(a, tEcg); }
+    const detener = () => { st.pausa = true; pintaPausa(); };
+    $("#adelante").onclick = () => { detener(); avanzaA(vecino(1) + 0.001); };
+    $("#atras").onclick = () => { detener(); irA(vecino(-1) + 0.001); };
+    $("#fino").onclick = () => { detener(); avanzaA(tEcg + 0.02); };
+    document.onkeydown = ev => {
+      if ((ev.target.closest && ev.target.closest("input,select")) || ev.ctrlKey || ev.altKey || ev.metaKey) return;
+      if (ev.key === " ") { ev.preventDefault(); $("#pausa").click(); }
+      else if (ev.key === "ArrowRight") { ev.preventDefault(); (ev.shiftKey ? $("#fino") : $("#adelante")).click(); }
+      else if (ev.key === "ArrowLeft") { ev.preventDefault(); $("#atras").click(); }
+    };
+    armar(); inicio(); pintaPausa();
     U.alRedimensionar = inicio; U.repintar = inicio;
+    // monitor de barrido: dibuja el tramo [t0, t1] y borra solo por delante de la pluma
+    function dibujar(t0, t1, sinBorrar) {
+      const W = ventana(), mm = P.mm, base = P.H * 0.62, c = P.c, X = t => (T - (t1 - t)) % W * 25 * mm, x1 = X(t1);
+      if (!sinBorrar) {
+        const b0 = x1 + 3, b1 = x1 + 18;
+        if (b1 > P.W) { if (b0 < P.W) P.grilla(b0, P.W); P.grilla(0, b1 - P.W); } else P.grilla(b0, b1);
+      }
+      c.strokeStyle = css("--traza"); c.lineWidth = 2; c.lineJoin = "round"; c.beginPath();
+      let prim = true;
+      for (let t = t0; t <= t1 + 1e-9; t += 0.002) {
+        const x = X(t), y = base - E.valor(ecg, st.der, t) * 10 * mm;
+        if (prim || x < xPrev - 5) c.moveTo(x, y); else c.lineTo(x, y);
+        prim = false; xPrev = x;
+      }
+      c.lineTo(x1, base - E.valor(ecg, st.der, t1) * 10 * mm); c.stroke();
+    }
+    const DETALLE = {
+      P: "El nódulo sinusal dispara. El frente recorre primero la aurícula derecha y luego la izquierda; como avanza hacia abajo y a la izquierda, en DII la P es positiva.",
+      PR: "El impulso cruza el nódulo AV, que lo frena a propósito para que las aurículas terminen de llenar los ventrículos. El trazado queda plano: el nódulo es demasiado pequeño para verse desde la piel.",
+      QRS: "His → ramas → Purkinje. Primero se activa el septo (de izquierda a derecha) y luego las paredes libres, del endocardio al epicardio. Es la masa más grande: por eso es la onda más alta.",
+      ST: "Todo el ventrículo está despolarizado a la vez (meseta, fase 2): no hay diferencia de potencial entre zonas y el trazado vuelve a la línea. El ventrículo se contrae.",
+      T: "Los ventrículos se repolarizan (fase 3). Empieza por el epicardio, al revés que la activación; por eso la T sale del mismo lado que el QRS.",
+      BL: "La P llegó al nódulo AV pero no pasa: en este ciclo no hay QRS ni contracción ventricular.",
+      f: "No hay P: las aurículas fibrilan sin contraerse. El nódulo AV deja pasar solo algunos estímulos, al azar: RR irregular.",
+      base: "Diástole: reposo eléctrico y llenado. El nódulo sinusal se va cargando solo (fase 4) hasta el próximo disparo."
+    };
     function paso() {
       const now = performance.now();
       const dt = Math.max(0, Math.min(0.05, (now - ultimo) / 1000)); ultimo = now;
       if (!st.pausa) {
-        const avance = dt * st.vel, W = ventana(), mm = P.mm, base = P.H * 0.62;
-        const t0 = tEcg; tEcg += avance; T += avance;
-        // monitor de barrido: borra un poco por delante y dibuja el tramo nuevo
-        const x0 = (T - avance) % W * 25 * mm, x1 = T % W * 25 * mm;
-        const c = P.c;
-        // borra solo por delante de la pluma (lo ya dibujado no se toca)
-        const b0 = x1 + 3, b1 = x1 + 18;
-        if (b1 > P.W) { if (b0 < P.W) P.grilla(b0, P.W); P.grilla(0, b1 - P.W); } else P.grilla(b0, b1);
-        c.strokeStyle = css("--traza"); c.lineWidth = 2; c.lineJoin = "round"; c.beginPath();
-        let prim = true;
-        for (let t = t0; t <= tEcg; t += 0.002) {
-          const x = (T - (tEcg - t)) % W * 25 * mm, y = base - E.valor(ecg, st.der, t) * 10 * mm;
-          if (prim || x < xPrev - 5) c.moveTo(x, y); else c.lineTo(x, y);
-          prim = false; xPrev = x;
-        }
-        const yf = base - E.valor(ecg, st.der, tEcg) * 10 * mm;
-        c.lineTo(x1, yf); c.stroke();
-
-        if (tEcg > ecg.dur - 2) armar();
+        const t0 = tEcg; tEcg += dt * st.vel; T += dt * st.vel;
+        dibujar(t0, tEcg);
+        if (tEcg > ecg.dur - 2) { armar(); inicio(); }
       }
       pintar(E.estado(ecg, tEcg), ecg.cfg);
       const o = E.onda(ecg, tEcg); $("#onda-k").textContent = o.k === "base" ? "—" : o.k; $("#onda-n").textContent = o.n;
+      $("#onda-d").textContent = st.pausa || st.vel <= 0.1 ? DETALLE[o.k] || "" : "";
       anim = requestAnimationFrame(paso);
     }
     anim = requestAnimationFrame(paso);

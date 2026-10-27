@@ -76,7 +76,9 @@
           <line id="dp-vec" x1="0" y1="250" x2="0" y2="250" stroke="#1E3A8A" stroke-width="12" marker-end="url(#pf)"/>
           ${[["E1", 1470, 500], ["E2", 66, 500], ["E3", 768, 150]].map(([n, x, y]) => `<g transform="translate(${x},${y})"><circle r="34" fill="#FACC15" stroke="#1b1b1b" stroke-width="4"/><text text-anchor="middle" dy="13" font-size="34" font-weight="800">${n.slice(1)}</text></g>`).join("")}
         </svg></div>
-        <div class="ctrl"><button class="btn" id="dp-dep">⚡ Despolarizar</button><button class="btn sec" id="dp-rep">💧 Repolarizar</button><span class="nota" id="dp-est"></span></div></div>
+        <div class="ctrl"><button class="btn" id="dp-dep">⚡ Despolarizar</button><button class="btn sec" id="dp-rep">💧 Repolarizar</button><span class="nota" id="dp-est"></span></div>
+        <div class="ctrl"><button class="btn sec" id="dp-p">⏸ Pausa</button><button class="btn sec" id="dp-s">Paso ⏭</button>
+          <label>Velocidad <input type="range" id="dp-v" min="0.1" max="2" step="0.05" value="1"></label></div></div>
       <div><div class="grid3" style="grid-template-columns:1fr">${[1, 2, 3].map(i => `<div class="caja" style="padding:8px 10px"><b>Electrodo ${i}</b> <span class="nota">${["a la derecha: la onda viene hacia él", "a la izquierda: la onda se aleja", "arriba: la onda pasa de costado"][i - 1]}</span><canvas class="ecg" id="dp-c${i}" style="height:70px"></canvas></div>`).join("")}</div>
         <div class="caja"><p>En reposo la célula es <b>positiva por fuera</b>. Al activarse se vuelve <b>negativa por fuera</b>. En el borde entre las dos zonas hay un dipolo: <b>− detrás, + delante</b>, y su vector apunta hacia donde avanza la onda.</p>
         <ul><li>Si la onda <b>se acerca</b> al electrodo positivo → <b>deflexión positiva</b>.</li><li>Si <b>se aleja</b> → <b>negativa</b>.</li><li>Si pasa <b>perpendicular</b> → <b>bifásica</b> (isodifásica).</li></ul>
@@ -92,6 +94,8 @@
         <p class="nota">Corte visto desde los pies (como una tomografía): arriba el esternón, a tu derecha el lado izquierdo del paciente.</p></div>
       <div class="caja"><p>El vector del QRS empieza en el <b>septo</b> (hacia la derecha y adelante: la pequeña <b>r de V1</b> y la <b>q de V6</b>) y luego gira hacia el <b>ventrículo izquierdo</b>, grueso, atrás y a la izquierda: <b>S profunda en V1</b>, <b>R alta en V5-V6</b>. Entre medio está la transición (V3-V4, sobre el tabique).</p>
         <canvas class="ecg" id="ch-c" style="height:150px"></canvas>
+        <div class="ctrl"><button class="btn sec" id="ch-p">⏸ Pausa</button><button class="btn sec" id="ch-s">Paso +5 ms ⏭</button>
+          <label>Velocidad <input type="range" id="ch-v" min="0.1" max="2" step="0.05" value="1"></label><b id="ch-t"></b></div>
         <p class="nota">V1-V2 miran el ventrículo derecho · V3-V4 el tabique · V5-V6 el ventrículo izquierdo.</p></div></div>`;
 
     /* --- 1. dipolo --- */
@@ -107,19 +111,29 @@
       x.strokeStyle = css("--traza"); x.lineWidth = 2; x.beginPath();
       s.forEach((v, i) => { const px = i / 300 * w, py = h / 2 - v * 26; i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.stroke();
     }
+    let pausaD = false, pendiente = 0;
     function cuadroDipolo() {
-      if (corre) f += 0.006;
+      const inc = pausaD ? pendiente : (corre ? 0.006 * +$("#dp-v").value : 0); pendiente = 0;
+      const nMuestras = inc > 0 ? Math.max(1, Math.round(inc / 0.006)) : 0, fAnt = f;
+      f += inc;
       const xf = Math.max(0, Math.min(1536, f * 1536)), act = f > 0 && f < 1, sg = modo === "dep" ? 1 : -1;
       $("#dp-act").setAttribute("width", modo === "dep" ? xf : 1536);
       $("#dp-rec").setAttribute("width", modo === "rep" ? xf : 0);
       $("#dp-vec").setAttribute("x1", xf - 110); $("#dp-vec").setAttribute("x2", xf + 110); $("#dp-vec").setAttribute("opacity", act ? 1 : 0);
       $("#dp-vec").setAttribute("transform", sg < 0 ? `rotate(180 ${xf} 250)` : "");
       $("#dp-carg").innerHTML = act ? [330, 690].map(y => `<text x="${xf - 70}" y="${y}" fill="${sg > 0 ? "#B91C1C" : "#1E3A8A"}">${sg > 0 ? "−" : "+"}</text><text x="${xf + 30}" y="${y}" fill="${sg > 0 ? "#1E3A8A" : "#B91C1C"}">${sg > 0 ? "+" : "−"}</text>`).join("") : "";
-      ELS.forEach((el, i) => { if (corre) { series[i].push(act ? potencial(el, xf, sg) : 0); if (series[i].length > 300) series[i].shift(); } dibujaSerie(cvs[i], series[i]); });
+      ELS.forEach((el, i) => {
+        for (let k = 1; k <= nMuestras; k++) {   // en un paso grande se agregan varias muestras para no deformar la curva
+          const fk = fAnt + (f - fAnt) * k / nMuestras, xk = Math.max(0, Math.min(1536, fk * 1536));
+          series[i].push(fk > 0 && fk < 1 ? potencial(el, xk, sg) : 0); if (series[i].length > 300) series[i].shift();
+        }
+        dibujaSerie(cvs[i], series[i]); });
       $("#dp-est").textContent = !act ? (f >= 1 ? (modo === "dep" ? "Tira toda activada: no hay frente → línea isoeléctrica (como el ST)" : "Tira en reposo otra vez") : "En reposo: no hay frente, no hay corriente") : (modo === "dep" ? "Frente de despolarización avanzando →" : "Frente de repolarización avanzando →");
       if (f > 1.25) corre = false;
       raf(cuadroDipolo);
     }
+    $("#dp-p").onclick = () => { pausaD = !pausaD; $("#dp-p").textContent = pausaD ? "▶ Seguir" : "⏸ Pausa"; };
+    $("#dp-s").onclick = () => { pausaD = true; $("#dp-p").textContent = "▶ Seguir"; if (!corre && f > 1.2) return; corre = true; pendiente = 0.05; };
     $("#dp-dep").onclick = () => { modo = "dep"; f = -0.1; corre = true; series.forEach(s => s.length = 0); };
     $("#dp-rep").onclick = () => { modo = "rep"; f = -0.1; corre = true; series.forEach(s => s.length = 0); };
     raf(cuadroDipolo);
@@ -184,9 +198,12 @@
     const esc = 260, aPant = ([x, z]) => [C0[0] + x * esc, C0[1] - z * esc];
     const bucle = []; for (let t = 0; t <= 0.1; t += 0.002) bucle.push(aPant(vecEn(t)));
     $("#ch-bucle").setAttribute("d", "M" + bucle.map(p => p.join(",")).join(" L"));
-    const cvh = $("#ch-c"); let th = 0;
+    const cvh = $("#ch-c"); let th = 0, pausaH = false;
+    $("#ch-p").onclick = () => { pausaH = !pausaH; $("#ch-p").textContent = pausaH ? "▶ Seguir" : "⏸ Pausa"; };
+    $("#ch-s").onclick = () => { pausaH = true; $("#ch-p").textContent = "▶ Seguir"; th = (th + 0.005) % 0.16; };
     function cuadroH() {
-      th = (th + 0.0009) % 0.16; const t = Math.min(th, 0.1), p = aPant(vecEn(t));
+      if (!pausaH) th = (th + 0.0009 * +$("#ch-v").value) % 0.16;
+      $("#ch-t").textContent = th <= 0.1 ? `QRS: ${Math.round(th * 1000)} ms` : "QRS terminado"; const t = Math.min(th, 0.1), p = aPant(vecEn(t));
       $("#ch-vec").setAttribute("x1", C0[0]); $("#ch-vec").setAttribute("y1", C0[1]); $("#ch-vec").setAttribute("x2", p[0]); $("#ch-vec").setAttribute("y2", p[1]);
       $("#ch-punta").setAttribute("cx", p[0]); $("#ch-punta").setAttribute("cy", p[1]);
       const P = new U.Papel(cvh, 30), w = cvh.clientWidth, mm = (w - 4) / 156; P.mm = mm; P.H = 150; const d = P.dpr;
@@ -237,7 +254,8 @@
         ${CANALES.map((c, i) => `<text class="eti" x="${c.x}" y="${i % 2 ? 330 : 300}" text-anchor="middle" font-size="40" fill="${c.col}">${c.ion}</text>`).join("")}<g id="iones"></g></svg></div></div>
         <div class="letrero"><span class="k" id="f-k">4</span><span id="f-n"></span></div></div>
       <div class="caja"><canvas id="pa" style="width:100%;height:260px;display:block"></canvas>
-        <div class="ctrl"><button class="btn sec" id="pa-p">⏸ Pausa</button><label>Velocidad <input type="range" id="pa-v" min="0.05" max="1" step="0.05" value="0.3"></label></div>
+        <div class="ctrl"><button class="btn sec" id="pa-p">⏸ Pausa</button><button class="btn sec" id="pa-s">Fase siguiente ⏭</button><button class="btn sec" id="pa-f">+10 ms</button>
+          <label>Velocidad <input type="range" id="pa-v" min="0.02" max="1" step="0.02" value="0.3"></label></div>
         <p class="nota" id="pa-nota"></p></div></div>`;
     const FASES_V = ["Fase 0 · despolarización rápida: se abren los canales de <b>Na⁺</b> y el sodio entra → coincide con el <b>QRS</b>",
       "Fase 1 · repolarización inicial breve: sale algo de <b>K⁺</b> (la muesca)",
@@ -251,6 +269,9 @@
     const ciclo = 0.8;
     $$("#cel .chip").forEach(b => b.onclick = () => { cel = b.dataset.c; $$("#cel .chip").forEach(x => x.classList.toggle("act", x === b)); });
     $("#pa-p").onclick = () => { pausa = !pausa; $("#pa-p").textContent = pausa ? "▶ Seguir" : "⏸ Pausa"; };
+    const faseEn = x => { const tc = ((x % 0.8) + 0.8) % 0.8; return cel === "v" ? fasV(tc - 0.02) : fasN(tc + 0.62, ciclo); };
+    $("#pa-s").onclick = () => { pausa = true; $("#pa-p").textContent = "▶ Seguir"; const f0 = faseEn(t); let k = 0; while (faseEn(t) === f0 && k++ < 1000) t += 0.001; t += 0.0005; };
+    $("#pa-f").onclick = () => { pausa = true; $("#pa-p").textContent = "▶ Seguir"; t += 0.01; };
     const ionesG = $("#iones"), part = [];
     for (let i = 0; i < 26; i++) { ionesG.insertAdjacentHTML("beforeend", `<circle r="13" opacity="0"/>`); part.push({ el: ionesG.lastChild, c: 0, y: 0, v: 0, vivo: false }); }
     function lanza(c) { const p = part.find(q => !q.vivo); if (!p || c.dir === 0 && Math.random() < 0.5) return;

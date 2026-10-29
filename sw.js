@@ -1,14 +1,14 @@
 /* Atlas sin internet: guarda todo el atlas la primera vez y lo sirve desde el teléfono, la tablet o la PC.
    web.py rellena la versión y la lista de archivos en cada compilación; una versión nueva reemplaza la caché vieja. */
 // varias apps comparten canazachyub.github.io: el nombre lleva la carpeta para no tocar las cachés de otra
-const BASE = "atlas " + self.registration.scope + " ", CACHE = BASE + "20261029131446";
+const BASE = "atlas " + self.registration.scope + " ", CACHE = BASE + "20261029162635";
 const NUCLEO = [
  "./",
- "fonts.css?v=20261029131446",
- "app.css?v=20261029131446",
- "datos.js?v=20261029131446",
- "app.js?v=20261029131446",
- "chat.js?v=20261029131446",
+ "fonts.css?v=20261029162635",
+ "app.css?v=20261029162635",
+ "datos.js?v=20261029162635",
+ "app.js?v=20261029162635",
+ "chat.js?v=20261029162635",
  "manifest.webmanifest",
  "icono-192.png",
  "icono-512.png",
@@ -237,6 +237,7 @@ const RESTO = [
  "modulos/ecg/index.html",
  "modulos/ecg/motor.js",
  "modulos/ecg/secciones.js",
+ "modulos/ecg/secciones2.js",
  "modulos/ecg/img/corazon.webp",
  "modulos/ecg/img/corte.webp",
  "modulos/ecg/img/dipolo.webp",
